@@ -3,6 +3,7 @@ export interface Employee {
   name: string
   email: string
   role: 'ADMIN' | 'ASSET_MANAGER' | 'DEPARTMENT_HEAD' | 'EMPLOYEE'
+  status: 'ACTIVE' | 'INACTIVE'
   departmentId: string | null
   department?: Department
 }
@@ -20,7 +21,7 @@ export interface Department {
 export interface AssetCategory {
   id: string
   name: string
-  description?: string
+  description?: string | null
   defaultBookable?: boolean
 }
 

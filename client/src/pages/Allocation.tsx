@@ -1,19 +1,47 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Plus, SlidersHorizontal, ArrowLeftRight, RotateCcw, AlertTriangle, ChevronDown } from 'lucide-react'
+import {
+  Search,
+  Plus,
+  SlidersHorizontal,
+  ArrowLeftRight,
+  RotateCcw,
+  AlertTriangle,
+  ChevronDown,
+} from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
+import { api } from '../lib/api'
 import { queryKeys } from '../lib/query-keys'
+import type { AssetStatus } from '../lib/types'
 
-interface Asset {
+interface ApiAsset {
   id: string
   tag: string
   name: string
-  status: 'AVAILABLE' | 'ALLOCATED'
+  status: AssetStatus
+}
+
+interface ApiAllocation {
+  id: string
+  assetId: string
+  targetType: 'EMPLOYEE' | 'DEPARTMENT'
+  expectedReturnAt: string | null
+  status: 'ACTIVE' | 'RETURNED' | 'TRANSFERRED'
+  asset?: { tag: string; name: string } | null
+  employee?: { name: string; email: string } | null
+  department?: { name: string } | null
+}
+
+interface AssetOption {
+  id: string
+  tag: string
+  name: string
+  status: AssetStatus
   currentHolder?: string
   currentHolderDept?: string
 }
 
-interface Allocation {
+interface AllocationRow {
   id: string
   assetTag: string
   assetName: string
@@ -24,40 +52,82 @@ interface Allocation {
   isOverdue: boolean
 }
 
-const mockAssets: Asset[] = [
-  { id: '1', tag: 'AF-0114', name: 'Dell Laptop', status: 'ALLOCATED', currentHolder: 'Priya Shah', currentHolderDept: 'Engineering' },
-  { id: '2', tag: 'AF-0062', name: 'Projector', status: 'AVAILABLE' },
-  { id: '3', tag: 'AF-0201', name: 'Office Chair', status: 'ALLOCATED', currentHolder: 'Raj Kumar', currentHolderDept: 'Marketing' },
-  { id: '4', tag: 'AF-0089', name: 'Keyboard', status: 'AVAILABLE' },
-  { id: '5', tag: 'AF-0034', name: 'Monitor', status: 'AVAILABLE' },
-]
-
-const mockAllocations: Allocation[] = [
-  { id: '1', assetTag: 'AF-0114', assetName: 'Dell Laptop', allocatedTo: 'Priya Shah', targetType: 'EMPLOYEE', expectedReturnAt: '2026-07-15', status: 'ACTIVE', isOverdue: false },
-  { id: '2', assetTag: 'AF-0062', assetName: 'Projector', allocatedTo: 'Engineering', targetType: 'DEPARTMENT', expectedReturnAt: null, status: 'ACTIVE', isOverdue: false },
-  { id: '3', assetTag: 'AF-0201', assetName: 'Office Chair', allocatedTo: 'Raj Kumar', targetType: 'EMPLOYEE', expectedReturnAt: '2026-06-01', status: 'ACTIVE', isOverdue: true },
-  { id: '4', assetTag: 'AF-0089', assetName: 'Keyboard', allocatedTo: 'Marketing', targetType: 'DEPARTMENT', expectedReturnAt: '2026-07-10', status: 'ACTIVE', isOverdue: false },
-  { id: '5', assetTag: 'AF-0034', assetName: 'Monitor', allocatedTo: 'Anita Desai', targetType: 'EMPLOYEE', expectedReturnAt: '2026-04-01', status: 'RETURNED', isOverdue: false },
-  { id: '6', assetTag: 'AF-0178', assetName: 'Laptop', allocatedTo: 'Rohit Verma', targetType: 'EMPLOYEE', expectedReturnAt: '2026-07-01', status: 'TRANSFERRED', isOverdue: false },
-]
-
 const filters = ['Status', 'Type', 'Department']
 
 export function AllocationPage() {
   const [search, setSearch] = useState('')
   const [selectedAssetId, setSelectedAssetId] = useState('')
 
-  const { data: allocations = mockAllocations } = useQuery<Allocation[]>({
-    queryKey: queryKeys.allocations.list({ search }),
-    queryFn: async () => {
-      const res = await fetch(`/api/allocations?q=${search}`)
-      if (!res.ok) return mockAllocations
-      return res.json()
-    },
-    initialData: mockAllocations,
+  const { data: apiAssets = [] } = useQuery<ApiAsset[]>({
+    queryKey: queryKeys.assets.list({ selector: 'allocation' }),
+    queryFn: () => api.get<ApiAsset[]>('/assets'),
+    refetchInterval: 10000,
   })
 
-  const selectedAsset = mockAssets.find((a) => a.id === selectedAssetId)
+  const { data: apiAllocations = [] } = useQuery<ApiAllocation[]>({
+    queryKey: queryKeys.allocations.list({ search }),
+    queryFn: () => api.get<ApiAllocation[]>('/allocations'),
+    refetchInterval: 10000,
+  })
+
+  const allocations = useMemo<AllocationRow[]>(
+    () =>
+      apiAllocations
+        .map((allocation) => {
+          const allocatedTo =
+            allocation.targetType === 'EMPLOYEE'
+              ? allocation.employee?.name ?? 'Unassigned employee'
+              : allocation.department?.name ?? 'Unassigned department'
+
+          return {
+            id: allocation.id,
+            assetTag: allocation.asset?.tag ?? '-',
+            assetName: allocation.asset?.name ?? '-',
+            allocatedTo,
+            targetType: allocation.targetType,
+            expectedReturnAt: allocation.expectedReturnAt,
+            status: allocation.status,
+            isOverdue:
+              allocation.status === 'ACTIVE' &&
+              !!allocation.expectedReturnAt &&
+              new Date(allocation.expectedReturnAt).getTime() < Date.now(),
+          }
+        })
+        .filter((allocation) => {
+          const haystack = [
+            allocation.assetTag,
+            allocation.assetName,
+            allocation.allocatedTo,
+            allocation.status,
+            allocation.targetType,
+          ]
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(search.toLowerCase())
+        }),
+    [apiAllocations, search]
+  )
+
+  const assetOptions = useMemo<AssetOption[]>(
+    () =>
+      apiAssets.map((asset) => {
+        const activeAllocation = apiAllocations.find(
+          (allocation) => allocation.assetId === asset.id && allocation.status === 'ACTIVE'
+        )
+        return {
+          id: asset.id,
+          tag: asset.tag,
+          name: asset.name,
+          status: asset.status,
+          currentHolder:
+            activeAllocation?.employee?.name ?? activeAllocation?.department?.name,
+          currentHolderDept: activeAllocation?.department?.name,
+        }
+      }),
+    [apiAssets, apiAllocations]
+  )
+
+  const selectedAsset = assetOptions.find((a) => a.id === selectedAssetId)
   const hasConflict = selectedAsset?.status === 'ALLOCATED'
 
   return (
@@ -105,19 +175,26 @@ export function AllocationPage() {
       </div>
 
       <div>
-        <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">Asset</label>
+        <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">
+          Asset
+        </label>
         <div className="relative">
           <select
             value={selectedAssetId}
             onChange={(e) => setSelectedAssetId(e.target.value)}
             className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
           >
-            <option value="">Select Asset....</option>
-            {mockAssets.map((a) => (
-              <option key={a.id} value={a.id}>{a.tag} - {a.name}</option>
+            <option value="">Select Asset...</option>
+            {assetOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.tag} - {a.name}
+              </option>
             ))}
           </select>
-          <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40" />
+          <ChevronDown
+            size={16}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40"
+          />
         </div>
       </div>
 
@@ -127,7 +204,8 @@ export function AllocationPage() {
             <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-accent" />
             <div>
               <p className="text-sm font-medium text-accent">
-                Already Allocated to {selectedAsset?.currentHolder} ({selectedAsset?.currentHolderDept})
+                Already Allocated to {selectedAsset?.currentHolder ?? 'another holder'}
+                {selectedAsset?.currentHolderDept ? ` (${selectedAsset.currentHolderDept})` : ''}
               </p>
               <p className="mt-1 text-xs text-foreground/60">
                 Direct re-allocation is blocked - submit a transfer request below
@@ -153,6 +231,13 @@ export function AllocationPage() {
             </tr>
           </thead>
           <tbody>
+            {allocations.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-5 py-8 text-sm text-foreground/40">
+                  No allocations found.
+                </td>
+              </tr>
+            )}
             {allocations.map((a) => (
               <tr key={a.id} className="hover:bg-background transition-colors cursor-pointer">
                 <td className="px-5 py-4">
@@ -168,7 +253,7 @@ export function AllocationPage() {
                 <td className={`px-5 py-4 text-sm ${a.isOverdue ? 'font-bold text-accent' : 'text-foreground/60'}`}>
                   {a.expectedReturnAt
                     ? new Date(a.expectedReturnAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                    : '—'}
+                    : '-'}
                 </td>
                 <td className="px-5 py-4">
                   <StatusPill

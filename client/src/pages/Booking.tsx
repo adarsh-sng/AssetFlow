@@ -1,16 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Plus, SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
+import { api } from '../lib/api'
 import { queryKeys } from '../lib/query-keys'
 
-interface Resource {
+interface ApiResource {
   id: string
+  tag: string
   name: string
-  type: 'ROOM' | 'EQUIPMENT'
 }
 
-interface Booking {
+interface ApiBooking {
+  id: string
+  assetId: string
+  title: string
+  status: 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED'
+  startsAt: string
+  endsAt: string
+  asset?: { name: string; tag: string } | null
+  requestedBy?: {
+    name: string
+    department?: { name: string } | null
+  } | null
+}
+
+interface BookingRow {
   id: string
   resourceId: string
   resourceName: string
@@ -22,37 +37,66 @@ interface Booking {
   status: 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED'
 }
 
-const mockResources: Resource[] = [
-  { id: 'r1', name: 'Conference Room B2', type: 'ROOM' },
-  { id: 'r2', name: 'Conference Room A1', type: 'ROOM' },
-  { id: 'r3', name: 'Meeting Room C3', type: 'ROOM' },
-]
-
-const mockBookings: Booking[] = [
-  { id: 'b1', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Procurement Team', department: 'Procurement', date: '2026-07-07', startTime: '09:00', endTime: '10:00', status: 'UPCOMING' },
-  { id: 'b2', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Raj Kumar', department: 'Marketing', date: '2026-07-07', startTime: '11:00', endTime: '12:00', status: 'UPCOMING' },
-  { id: 'b3', resourceId: 'r2', resourceName: 'Conference Room A1', bookedBy: 'Priya Shah', department: 'Engineering', date: '2026-07-07', startTime: '14:00', endTime: '15:30', status: 'UPCOMING' },
-  { id: 'b4', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Anita Desai', department: 'HR', date: '2026-07-05', startTime: '10:00', endTime: '11:00', status: 'COMPLETED' },
-]
-
-const timeSlots = ['9:00', '10:00', '11:00', '12:00', '1:00', '2:00', '3:00', '4:00', '5:00']
-
+const timeSlots = ['9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00']
 const filters = ['Status', 'Resource', 'Department']
+
+function isoDate(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
+function timeLabel(value: string) {
+  return new Date(value).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
 
 export function BookingPage() {
   const [search, setSearch] = useState('')
-  const [selectedResource, setSelectedResource] = useState('r1')
-  const [selectedDate, setSelectedDate] = useState('2026-07-07')
+  const [selectedResource, setSelectedResource] = useState('')
+  const [selectedDate, setSelectedDate] = useState(isoDate(new Date()))
 
-  const { data: bookings = mockBookings } = useQuery<Booking[]>({
-    queryKey: queryKeys.bookings.list({ search, resource: selectedResource, date: selectedDate }),
-    queryFn: async () => {
-      const res = await fetch(`/api/bookings?q=${search}&resource=${selectedResource}&date=${selectedDate}`)
-      if (!res.ok) return mockBookings
-      return res.json()
-    },
-    initialData: mockBookings,
+  const { data: resources = [] } = useQuery<ApiResource[]>({
+    queryKey: queryKeys.assets.list({ bookable: true }),
+    queryFn: () => api.get<ApiResource[]>('/assets?bookable=true'),
+    refetchInterval: 15000,
   })
+
+  const { data: apiBookings = [] } = useQuery<ApiBooking[]>({
+    queryKey: queryKeys.bookings.list({ search, selectedResource, selectedDate }),
+    queryFn: () => api.get<ApiBooking[]>('/bookings'),
+    refetchInterval: 10000,
+  })
+
+  useEffect(() => {
+    if (!selectedResource && resources[0]) {
+      setSelectedResource(resources[0].id)
+    }
+  }, [resources, selectedResource])
+
+  const bookings = useMemo<BookingRow[]>(
+    () =>
+      apiBookings
+        .map((booking) => ({
+          id: booking.id,
+          resourceId: booking.assetId,
+          resourceName: booking.asset?.name ?? booking.title,
+          bookedBy: booking.requestedBy?.name ?? 'Unknown requester',
+          department: booking.requestedBy?.department?.name ?? '-',
+          date: booking.startsAt.slice(0, 10),
+          startTime: timeLabel(booking.startsAt),
+          endTime: timeLabel(booking.endsAt),
+          status: booking.status,
+        }))
+        .filter((booking) => {
+          const haystack = [booking.resourceName, booking.bookedBy, booking.department, booking.status]
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(search.toLowerCase())
+        }),
+    [apiBookings, search]
+  )
 
   const filteredBookings = bookings.filter(
     (b) => b.resourceId === selectedResource && b.date === selectedDate
@@ -67,7 +111,8 @@ export function BookingPage() {
     })
   }
 
-  const selectedResourceName = mockResources.find((r) => r.id === selectedResource)?.name || ''
+  const selectedResourceName =
+    resources.find((r) => r.id === selectedResource)?.name ?? 'No bookable resource'
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -121,8 +166,11 @@ export function BookingPage() {
               onChange={(e) => setSelectedResource(e.target.value)}
               className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
             >
-              {mockResources.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
+              {resources.length === 0 && <option value="">No bookable resources</option>}
+              {resources.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.tag} - {r.name}
+                </option>
               ))}
             </select>
             <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40" />
@@ -181,6 +229,13 @@ export function BookingPage() {
             </tr>
           </thead>
           <tbody>
+            {filteredBookings.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-8 text-sm text-foreground/40">
+                  No bookings for this resource and date.
+                </td>
+              </tr>
+            )}
             {filteredBookings.map((b) => (
               <tr key={b.id} className="hover:bg-background transition-colors cursor-pointer">
                 <td className="px-5 py-4 text-sm font-medium">{b.resourceName}</td>

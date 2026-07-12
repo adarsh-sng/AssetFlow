@@ -1,11 +1,21 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Plus, SlidersHorizontal } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
+import { api } from '../lib/api'
 import { queryKeys } from '../lib/query-keys'
 import type { AssetStatus } from '../lib/types'
 
-interface Asset {
+interface ApiAsset {
+  id: string
+  tag: string
+  name: string
+  status: AssetStatus
+  location: string | null
+  category?: { name: string } | null
+}
+
+interface AssetRow {
   id: string
   tag: string
   name: string
@@ -13,12 +23,6 @@ interface Asset {
   status: AssetStatus
   location: string
 }
-
-const mockAssets: Asset[] = [
-  { id: '1', tag: 'AF-0012', name: 'Dell Laptop', category: 'Electronics', status: 'ALLOCATED', location: 'Bangalore' },
-  { id: '2', tag: 'AF-0062', name: 'Projector', category: 'Electronics', status: 'UNDER_MAINTENANCE', location: 'HQ floor 2' },
-  { id: '3', tag: 'AF-0201', name: 'Office chair', category: 'Furniture', status: 'AVAILABLE', location: 'Warehouse' },
-]
 
 const filters = ['Category', 'Status', 'Department']
 
@@ -37,15 +41,24 @@ function statusVariant(status: AssetStatus) {
 export function AssetsPage() {
   const [search, setSearch] = useState('')
 
-  const { data: assets = mockAssets } = useQuery<Asset[]>({
+  const { data: apiAssets = [] } = useQuery<ApiAsset[]>({
     queryKey: queryKeys.assets.list({ search }),
-    queryFn: async () => {
-      const res = await fetch(`/api/assets?q=${search}`)
-      if (!res.ok) return mockAssets
-      return res.json()
-    },
-    initialData: mockAssets,
+    queryFn: () => api.get<ApiAsset[]>(`/assets?q=${encodeURIComponent(search)}`),
+    refetchInterval: 10000,
   })
+
+  const assets = useMemo<AssetRow[]>(
+    () =>
+      apiAssets.map((asset) => ({
+        id: asset.id,
+        tag: asset.tag,
+        name: asset.name,
+        category: asset.category?.name ?? 'Uncategorized',
+        status: asset.status,
+        location: asset.location ?? '-',
+      })),
+    [apiAssets]
+  )
 
   return (
     <div className="space-y-6">
@@ -107,6 +120,13 @@ export function AssetsPage() {
             </tr>
           </thead>
           <tbody>
+            {assets.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-8 text-sm text-foreground/40">
+                  No assets found.
+                </td>
+              </tr>
+            )}
             {assets.map((asset) => (
               <tr key={asset.id} className="hover:bg-background transition-colors cursor-pointer">
                 <td className="px-5 py-4 text-sm font-bold">{asset.tag}</td>

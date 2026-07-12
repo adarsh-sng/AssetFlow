@@ -4,51 +4,19 @@ import { useNavigate } from 'react-router-dom'
 import { KPICard } from '../components/ui/KPICard'
 import { AlertBanner } from '../components/ui/AlertBanner'
 import { ActivityItem } from '../components/ui/ActivityItem'
+import { api } from '../lib/api'
 import { queryKeys } from '../lib/query-keys'
+import type { ActivityLog, DashboardStats } from '../lib/types'
 
-const mockStats = {
-  available: 128,
-  allocated: 76,
-  inRepair: 4,
-  bookings: 9,
-  pending: 3,
-  returns: 12,
-  overdue: 3,
+const emptyStats: DashboardStats = {
+  available: 0,
+  allocated: 0,
+  inRepair: 0,
+  bookings: 0,
+  pending: 0,
+  returns: 0,
+  overdue: 0,
 }
-
-interface ActivityData {
-  id: string
-  message: string
-  timestamp: string
-  type: 'allocation' | 'booking' | 'maintenance' | 'system'
-}
-
-const mockActivity: ActivityData[] = [
-  {
-    id: '1',
-    message: 'Laptop AF-0114 allocated to Priya Shah',
-    timestamp: new Date(Date.now() - 12 * 60000).toISOString(),
-    type: 'allocation',
-  },
-  {
-    id: '2',
-    message: 'Conference Room B2 booking confirmed for 2:00 PM',
-    timestamp: new Date(Date.now() - 60 * 60000).toISOString(),
-    type: 'booking',
-  },
-  {
-    id: '3',
-    message: 'Projector AF-0062 maintenance ticket resolved',
-    timestamp: new Date(Date.now() - 3 * 60 * 60000).toISOString(),
-    type: 'maintenance',
-  },
-  {
-    id: '4',
-    message: 'Inventory sync complete (248 records updated)',
-    timestamp: new Date(Date.now() - 24 * 60 * 60000).toISOString(),
-    type: 'system',
-  },
-]
 
 function formatTimestamp(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -72,24 +40,16 @@ const dateStr = today.toLocaleDateString('en-US', {
 export function DashboardPage() {
   const navigate = useNavigate()
 
-  const { data: stats = mockStats } = useQuery({
+  const { data: stats = emptyStats } = useQuery<DashboardStats>({
     queryKey: queryKeys.dashboard.stats(),
-    queryFn: async () => {
-      const res = await fetch('/api/dashboard/stats')
-      if (!res.ok) return mockStats
-      return res.json()
-    },
-    initialData: mockStats,
+    queryFn: () => api.get<DashboardStats>('/dashboard/stats'),
+    refetchInterval: 10000,
   })
 
-  const { data: activity = mockActivity } = useQuery<ActivityData[]>({
+  const { data: activity = [] } = useQuery<ActivityLog[]>({
     queryKey: queryKeys.dashboard.activity(),
-    queryFn: async () => {
-      const res = await fetch('/api/dashboard/activity')
-      if (!res.ok) return mockActivity
-      return res.json()
-    },
-    initialData: mockActivity,
+    queryFn: () => api.get<ActivityLog[]>('/dashboard/activity'),
+    refetchInterval: 10000,
   })
 
   return (
@@ -160,6 +120,9 @@ export function DashboardPage() {
             Recent Activity
           </h2>
           <div className="border border-border-subtle bg-white p-5 shadow-custom">
+            {activity.length === 0 && (
+              <p className="text-sm text-foreground/40">No activity yet.</p>
+            )}
             {activity.map((item) => (
               <ActivityItem
                 key={item.id}
