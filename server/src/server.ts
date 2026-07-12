@@ -4,9 +4,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 
-import type { Request, Response } from "express"
-
- const app = express();
+const app = express()
 
 app.use(helmet())
 app.use(
@@ -29,7 +27,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
-    service: 'Habit Tracker API',
+    service: 'AssetFlow API',
   })
 })
 

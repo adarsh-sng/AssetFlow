@@ -26,11 +26,16 @@ const envSchema = z.object({
   PORT: z.coerce.number().positive().default(3000),
   HOST: z.string().default('localhost'),
 
-   DATABASE_URL: z.string().startsWith('postgresql://'),
+  DATABASE_URL: z
+    .string()
+    .startsWith('postgresql://')
+    .default('postgresql://postgres:postgres@localhost:5432/assetflow'),
   DATABASE_POOL_MIN: z.coerce.number().min(0).default(2),
   DATABASE_POOL_MAX: z.coerce.number().positive().default(10),
 
-    // CORS
+  AUTH_SECRET: z.string().min(32).default('assetflow-dev-secret-change-before-production'),
+
+  // CORS
   CORS_ORIGIN: z
     .string()
     .or(z.array(z.string()))
@@ -40,7 +45,7 @@ const envSchema = z.object({
       }
       return val
     })
-    .default([]),
+    .default('http://localhost:5173'),
 
   LOG_LEVEL: z
     .enum(['error', 'warn', 'info', 'debug', 'trace'])
