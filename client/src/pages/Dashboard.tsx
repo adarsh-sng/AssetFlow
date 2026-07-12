@@ -13,41 +13,53 @@ const mockStats = {
   bookings: 9,
   pending: 3,
   returns: 12,
+  overdue: 3,
 }
 
-interface ActivityItem {
+interface ActivityData {
   id: string
   message: string
   timestamp: string
   type: 'allocation' | 'booking' | 'maintenance' | 'system'
 }
 
-const mockActivity: ActivityItem[] = [
+const mockActivity: ActivityData[] = [
   {
     id: '1',
     message: 'Laptop AF-0114 allocated to Priya Shah',
-    timestamp: '12 min ago',
+    timestamp: new Date(Date.now() - 12 * 60000).toISOString(),
     type: 'allocation',
   },
   {
     id: '2',
     message: 'Conference Room B2 booking confirmed for 2:00 PM',
-    timestamp: '1 hr ago',
+    timestamp: new Date(Date.now() - 60 * 60000).toISOString(),
     type: 'booking',
   },
   {
     id: '3',
     message: 'Projector AF-0062 maintenance ticket resolved',
-    timestamp: '3 hrs ago',
+    timestamp: new Date(Date.now() - 3 * 60 * 60000).toISOString(),
     type: 'maintenance',
   },
   {
     id: '4',
     message: 'Inventory sync complete (248 records updated)',
-    timestamp: 'Yesterday',
+    timestamp: new Date(Date.now() - 24 * 60 * 60000).toISOString(),
     type: 'system',
   },
 ]
+
+function formatTimestamp(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
 
 const today = new Date()
 const dateStr = today.toLocaleDateString('en-US', {
@@ -70,7 +82,7 @@ export function DashboardPage() {
     initialData: mockStats,
   })
 
-  const { data: activity = mockActivity } = useQuery<ActivityItem[]>({
+  const { data: activity = mockActivity } = useQuery<ActivityData[]>({
     queryKey: queryKeys.dashboard.activity(),
     queryFn: async () => {
       const res = await fetch('/api/dashboard/activity')
@@ -96,18 +108,21 @@ export function DashboardPage() {
         </button>
       </div>
 
-      <AlertBanner
-        message="3 assets overdue for return - flagged for immediate follow-up with respective department heads."
-        action={{ label: 'Review List', onClick: () => navigate('/allocation') }}
-      />
+      {stats.overdue > 0 && (
+        <AlertBanner
+          message={`${stats.overdue} assets overdue for return - flagged for immediate follow-up with respective department heads.`}
+          action={{ label: 'Review List', onClick: () => navigate('/allocation') }}
+        />
+      )}
 
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-7 gap-3">
         <KPICard label="Available" value={stats.available} />
         <KPICard label="Allocated" value={stats.allocated} />
         <KPICard label="In Repair" value={stats.inRepair} accent />
         <KPICard label="Bookings" value={stats.bookings} />
         <KPICard label="Pending" value={stats.pending} />
         <KPICard label="Returns" value={stats.returns} />
+        <KPICard label="Overdue" value={stats.overdue} accent />
       </div>
 
       <div className="grid grid-cols-5 gap-8">
@@ -149,7 +164,7 @@ export function DashboardPage() {
               <ActivityItem
                 key={item.id}
                 message={item.message}
-                timestamp={item.timestamp}
+                timestamp={formatTimestamp(item.timestamp)}
                 highlight={item.type === 'allocation'}
               />
             ))}

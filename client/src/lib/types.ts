@@ -3,16 +3,25 @@ export interface Employee {
   name: string
   email: string
   role: 'ADMIN' | 'ASSET_MANAGER' | 'DEPARTMENT_HEAD' | 'EMPLOYEE'
-  departmentId: string
+  departmentId: string | null
   department?: Department
 }
 
 export interface Department {
   id: string
   name: string
-  headId?: string
-  parentDepartmentId?: string
+  headId: string | null
+  head?: { id: string; name: string; email: string } | null
+  parentId: string | null
+  parent?: { id: string; name: string } | null
   status: 'ACTIVE' | 'INACTIVE'
+}
+
+export interface AssetCategory {
+  id: string
+  name: string
+  description?: string
+  defaultBookable?: boolean
 }
 
 export interface Asset {
@@ -26,22 +35,16 @@ export interface Asset {
   condition: string
   location: string
   departmentId?: string
-  allocatedToId?: string
 }
 
 export type AssetStatus =
   | 'AVAILABLE'
   | 'ALLOCATED'
-  | 'IN_REPAIR'
-  | 'MAINTENANCE'
-  | 'RETIRED'
+  | 'RESERVED'
+  | 'UNDER_MAINTENANCE'
   | 'LOST'
-
-export interface AssetCategory {
-  id: string
-  name: string
-  description?: string
-}
+  | 'RETIRED'
+  | 'DISPOSED'
 
 export interface DashboardStats {
   available: number
@@ -50,6 +53,7 @@ export interface DashboardStats {
   bookings: number
   pending: number
   returns: number
+  overdue: number
 }
 
 export interface ActivityLog {
@@ -57,9 +61,4 @@ export interface ActivityLog {
   message: string
   timestamp: string
   type: 'allocation' | 'booking' | 'maintenance' | 'system'
-}
-
-export interface ApiResponse<T> {
-  data: T | null
-  error: string | null
 }

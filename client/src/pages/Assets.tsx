@@ -3,23 +3,36 @@ import { useQuery } from '@tanstack/react-query'
 import { Search, Plus, SlidersHorizontal } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
+import type { AssetStatus } from '../lib/types'
 
 interface Asset {
   id: string
   tag: string
   name: string
   category: string
-  status: 'AVAILABLE' | 'ALLOCATED' | 'MAINTENANCE' | 'IN_REPAIR'
+  status: AssetStatus
   location: string
 }
 
 const mockAssets: Asset[] = [
   { id: '1', tag: 'AF-0012', name: 'Dell Laptop', category: 'Electronics', status: 'ALLOCATED', location: 'Bangalore' },
-  { id: '2', tag: 'AF-0062', name: 'Projector', category: 'Electronics', status: 'MAINTENANCE', location: 'HQ floor 2' },
+  { id: '2', tag: 'AF-0062', name: 'Projector', category: 'Electronics', status: 'UNDER_MAINTENANCE', location: 'HQ floor 2' },
   { id: '3', tag: 'AF-0201', name: 'Office chair', category: 'Furniture', status: 'AVAILABLE', location: 'Warehouse' },
 ]
 
 const filters = ['Category', 'Status', 'Department']
+
+function statusVariant(status: AssetStatus) {
+  switch (status) {
+    case 'AVAILABLE':
+      return 'outlined'
+    case 'ALLOCATED':
+    case 'RESERVED':
+      return 'active'
+    default:
+      return 'warning'
+  }
+}
 
 export function AssetsPage() {
   const [search, setSearch] = useState('')
@@ -100,16 +113,8 @@ export function AssetsPage() {
                 <td className="px-5 py-4 text-sm">{asset.name}</td>
                 <td className="px-5 py-4 text-sm text-foreground/60">{asset.category}</td>
                 <td className="px-5 py-4">
-                  <StatusPill
-                    variant={
-                      asset.status === 'AVAILABLE'
-                        ? 'outlined'
-                        : asset.status === 'ALLOCATED'
-                        ? 'active'
-                        : 'warning'
-                    }
-                  >
-                    {asset.status}
+                  <StatusPill variant={statusVariant(asset.status)}>
+                    {asset.status.replace(/_/g, ' ')}
                   </StatusPill>
                 </td>
                 <td className="px-5 py-4 text-sm text-foreground/60">{asset.location}</td>
