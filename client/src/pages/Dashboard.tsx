@@ -5,50 +5,8 @@ import { KPICard } from '../components/ui/KPICard'
 import { AlertBanner } from '../components/ui/AlertBanner'
 import { ActivityItem } from '../components/ui/ActivityItem'
 import { queryKeys } from '../lib/query-keys'
-
-const mockStats = {
-  available: 128,
-  allocated: 76,
-  inRepair: 4,
-  bookings: 9,
-  pending: 3,
-  returns: 12,
-  overdue: 3,
-}
-
-interface ActivityData {
-  id: string
-  message: string
-  timestamp: string
-  type: 'allocation' | 'booking' | 'maintenance' | 'system'
-}
-
-const mockActivity: ActivityData[] = [
-  {
-    id: '1',
-    message: 'Laptop AF-0114 allocated to Priya Shah',
-    timestamp: new Date(Date.now() - 12 * 60000).toISOString(),
-    type: 'allocation',
-  },
-  {
-    id: '2',
-    message: 'Conference Room B2 booking confirmed for 2:00 PM',
-    timestamp: new Date(Date.now() - 60 * 60000).toISOString(),
-    type: 'booking',
-  },
-  {
-    id: '3',
-    message: 'Projector AF-0062 maintenance ticket resolved',
-    timestamp: new Date(Date.now() - 3 * 60 * 60000).toISOString(),
-    type: 'maintenance',
-  },
-  {
-    id: '4',
-    message: 'Inventory sync complete (248 records updated)',
-    timestamp: new Date(Date.now() - 24 * 60 * 60000).toISOString(),
-    type: 'system',
-  },
-]
+import { api } from '../lib/api'
+import type { DashboardStats, ServerActivityLog } from '../lib/types'
 
 function formatTimestamp(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -72,25 +30,50 @@ const dateStr = today.toLocaleDateString('en-US', {
 export function DashboardPage() {
   const navigate = useNavigate()
 
-  const { data: stats = mockStats } = useQuery({
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery<DashboardStats>({
     queryKey: queryKeys.dashboard.stats(),
-    queryFn: async () => {
-      const res = await fetch('/api/dashboard/stats')
-      if (!res.ok) return mockStats
-      return res.json()
-    },
-    initialData: mockStats,
+    queryFn: () => api.get<DashboardStats>('/dashboard/stats'),
   })
 
-  const { data: activity = mockActivity } = useQuery<ActivityData[]>({
+  const { data: activity, isLoading: activityLoading, error: activityError } = useQuery<ServerActivityLog[]>({
     queryKey: queryKeys.dashboard.activity(),
-    queryFn: async () => {
-      const res = await fetch('/api/dashboard/activity')
-      if (!res.ok) return mockActivity
-      return res.json()
-    },
-    initialData: mockActivity,
+    queryFn: () => api.get<ServerActivityLog[]>('/dashboard/activity'),
   })
+
+  if (statsLoading || activityLoading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="font-serif text-4xl font-light text-foreground">Today&apos;s Overview</h1>
+          <p className="mt-1 text-2xs font-bold uppercase tracking-widest text-foreground/40">{dateStr}</p>
+        </div>
+        <div className="grid grid-cols-7 gap-3">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="border border-border-subtle bg-white p-5 shadow-custom animate-pulse">
+              <div className="h-4 w-12 bg-foreground/10" />
+              <div className="mt-2 h-8 w-10 bg-foreground/10" />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError || activityError) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="font-serif text-4xl font-light text-foreground">Today&apos;s Overview</h1>
+          <p className="mt-1 text-2xs font-bold uppercase tracking-widest text-foreground/40">{dateStr}</p>
+        </div>
+        <div className="border border-accent/30 bg-accent/10 px-5 py-4">
+          <p className="text-sm font-medium text-accent">
+            Unable to load dashboard data. Please ensure the server is running.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -108,22 +91,24 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {stats.overdue > 0 && (
+      {stats && stats.overdue > 0 && (
         <AlertBanner
           message={`${stats.overdue} assets overdue for return - flagged for immediate follow-up with respective department heads.`}
           action={{ label: 'Review List', onClick: () => navigate('/allocation') }}
         />
       )}
 
-      <div className="grid grid-cols-7 gap-3">
-        <KPICard label="Available" value={stats.available} />
-        <KPICard label="Allocated" value={stats.allocated} />
-        <KPICard label="In Repair" value={stats.inRepair} accent />
-        <KPICard label="Bookings" value={stats.bookings} />
-        <KPICard label="Pending" value={stats.pending} />
-        <KPICard label="Returns" value={stats.returns} />
-        <KPICard label="Overdue" value={stats.overdue} accent />
-      </div>
+      {stats && (
+        <div className="grid grid-cols-7 gap-3">
+          <KPICard label="Available" value={stats.available} />
+          <KPICard label="Allocated" value={stats.allocated} />
+          <KPICard label="In Repair" value={stats.inRepair} accent />
+          <KPICard label="Bookings" value={stats.bookings} />
+          <KPICard label="Pending" value={stats.pending} />
+          <KPICard label="Returns" value={stats.returns} />
+          <KPICard label="Overdue" value={stats.overdue} accent />
+        </div>
+      )}
 
       <div className="grid grid-cols-5 gap-8">
         <div className="col-span-2 space-y-4">
@@ -160,14 +145,18 @@ export function DashboardPage() {
             Recent Activity
           </h2>
           <div className="border border-border-subtle bg-white p-5 shadow-custom">
-            {activity.map((item) => (
-              <ActivityItem
-                key={item.id}
-                message={item.message}
-                timestamp={formatTimestamp(item.timestamp)}
-                highlight={item.type === 'allocation'}
-              />
-            ))}
+            {activity && activity.length > 0 ? (
+              activity.map((item) => (
+                <ActivityItem
+                  key={item.id}
+                  message={item.message}
+                  timestamp={formatTimestamp(item.timestamp)}
+                  highlight={item.type === 'ALLOCATION'}
+                />
+              ))
+            ) : (
+              <p className="text-sm text-foreground/40">No recent activity</p>
+            )}
           </div>
         </div>
       </div>

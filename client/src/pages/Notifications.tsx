@@ -1,24 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../lib/query-keys'
+import { api } from '../lib/api'
+import type { ServerNotification } from '../lib/types'
 
 type NotificationFilter = 'ALL' | 'ALERTS' | 'APPROVALS' | 'BOOKINGS'
-
-interface Notification {
-  id: string
-  message: string
-  timestamp: string
-  type: 'allocation' | 'maintenance' | 'booking' | 'transfer' | 'overdue' | 'audit'
-}
-
-const mockNotifications: Notification[] = [
-  { id: '1', message: 'Laptop AF-0014 assigned to Priya Shah', timestamp: '2m ago', type: 'allocation' },
-  { id: '2', message: 'Maintenance request AF-0055 approved', timestamp: '18m ago', type: 'maintenance' },
-  { id: '3', message: 'Booking confirmed: Room B2: 2:00 to 3:00 PM', timestamp: '1h ago', type: 'booking' },
-  { id: '4', message: 'Transfer approved: AF-0033 to facilities dept', timestamp: '3h ago', type: 'transfer' },
-  { id: '5', message: 'Overdue return: AF-0021 was due 3 days ago', timestamp: '1d ago', type: 'overdue' },
-  { id: '6', message: 'Audit discrepancy flagged: AF-0088 damaged', timestamp: '2d ago', type: 'audit' },
-]
 
 const filterTabs: { key: NotificationFilter; label: string }[] = [
   { key: 'ALL', label: 'All' },
@@ -28,34 +14,81 @@ const filterTabs: { key: NotificationFilter; label: string }[] = [
 ]
 
 const typeColor: Record<string, string> = {
-  allocation: 'bg-foreground',
-  maintenance: 'bg-accent',
-  booking: 'bg-foreground',
-  transfer: 'bg-accent',
-  overdue: 'bg-orange-500',
-  audit: 'bg-orange-500',
+  ASSET: 'bg-foreground',
+  MAINTENANCE: 'bg-accent',
+  BOOKING: 'bg-foreground',
+  TRANSFER: 'bg-accent',
+  OVERDUE: 'bg-orange-500',
+  AUDIT: 'bg-orange-500',
+  SYSTEM: 'bg-foreground/30',
+}
+
+const filterTypeMap: Record<NotificationFilter, string | null> = {
+  ALL: null,
+  ALERTS: 'OVERDUE',
+  APPROVALS: 'MAINTENANCE',
+  BOOKINGS: 'BOOKING',
+}
+
+function formatTimestamp(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
 }
 
 export function NotificationsPage() {
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('ALL')
+  const queryClient = useQueryClient()
 
-  const { data: notifications = mockNotifications } = useQuery<Notification[]>({
+  const { data: notifications = [], isLoading, error } = useQuery<ServerNotification[]>({
     queryKey: queryKeys.notifications.list({ filter: activeFilter }),
-    queryFn: async () => {
-      const res = await fetch(`/api/notifications?filter=${activeFilter}`)
-      if (!res.ok) return mockNotifications
-      return res.json()
+    queryFn: () => {
+      const params = new URLSearchParams()
+      const type = filterTypeMap[activeFilter]
+      if (type) params.set('type', type)
+      return api.get<ServerNotification[]>(`/notifications?${params.toString()}`)
     },
-    initialData: mockNotifications,
   })
 
-  const filteredNotifications = notifications.filter((n) => {
-    if (activeFilter === 'ALL') return true
-    if (activeFilter === 'ALERTS') return n.type === 'overdue' || n.type === 'audit'
-    if (activeFilter === 'APPROVALS') return n.type === 'maintenance' || n.type === 'transfer'
-    if (activeFilter === 'BOOKINGS') return n.type === 'booking'
-    return true
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all })
+    },
   })
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-serif text-4xl font-light">Notifications</h1>
+        <div className="border border-border-subtle bg-white p-8 shadow-custom">
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 bg-foreground/5 animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-serif text-4xl font-light">Notifications</h1>
+        <div className="border border-accent/30 bg-accent/10 px-5 py-4">
+          <p className="text-sm font-medium text-accent">
+            Unable to load notifications. Please ensure the server is running.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -80,25 +113,32 @@ export function NotificationsPage() {
       </div>
 
       <div className="border border-border-subtle bg-white shadow-custom divide-y divide-border-subtle">
-        {filteredNotifications.map((n) => (
-          <div key={n.id} className="flex items-center justify-between px-5 py-4 hover:bg-background transition-colors cursor-pointer">
-            <div className="flex items-center gap-4">
-              <span className={`block size-2 flex-shrink-0 ${typeColor[n.type]}`} />
-              <span className="text-sm">
-                {n.message.split(/(AF-\d+)/).map((part, i) =>
-                  part.match(/AF-\d+/) ? (
-                    <strong key={i} className="font-bold">{part}</strong>
-                  ) : (
-                    part
-                  )
-                )}
+        {notifications.length === 0 ? (
+          <div className="px-5 py-8 text-center text-sm text-foreground/40">
+            No notifications
+          </div>
+        ) : (
+          notifications.map((n) => (
+            <div
+              key={n.id}
+              onClick={() => !n.readAt && markReadMutation.mutate(n.id)}
+              className={`flex items-center justify-between px-5 py-4 hover:bg-background transition-colors cursor-pointer ${
+                !n.readAt ? 'bg-foreground/[0.02]' : ''
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <span className={`block size-2 flex-shrink-0 ${typeColor[n.type] ?? 'bg-foreground/30'}`} />
+                <div>
+                  <span className="text-sm font-medium mr-2">{n.title}</span>
+                  <span className="text-sm text-foreground/60">{n.message}</span>
+                </div>
+              </div>
+              <span className="flex-shrink-0 text-2xs font-bold uppercase tracking-widest text-foreground/40">
+                {formatTimestamp(n.createdAt)}
               </span>
             </div>
-            <span className="flex-shrink-0 text-2xs font-bold uppercase tracking-widest text-foreground/40">
-              {n.timestamp}
-            </span>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   )

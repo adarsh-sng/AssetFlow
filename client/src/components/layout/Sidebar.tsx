@@ -11,6 +11,7 @@ import {
   Bell,
   Hexagon,
 } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
@@ -27,7 +28,25 @@ const systemItems = [
   { label: 'Notifications', icon: Bell, to: '/notifications' },
 ]
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
+
+function formatRole(role: string): string {
+  return role
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 export function Sidebar() {
+  const { user } = useAuth()
+
   return (
     <aside className="flex flex-col gap-7 min-h-screen w-[240px] border-r border-border-subtle bg-white p-5">
       <div className="flex items-center gap-3">
@@ -80,11 +99,11 @@ export function Sidebar() {
 
       <div className="mt-auto flex items-center gap-3 border border-border-subtle bg-background p-3">
         <div className="grid size-9 place-items-center rounded-full bg-foreground text-background text-xs font-bold">
-          AS
+          {user ? getInitials(user.name) : '??'}
         </div>
         <div className="leading-tight">
-          <div className="text-xs font-bold">ADMIN USER</div>
-          <div className="text-xs text-foreground/50">Super Administrator</div>
+          <div className="text-xs font-bold">{user?.name ?? 'Not logged in'}</div>
+          <div className="text-xs text-foreground/50">{user?.role ? formatRole(user.role) : '—'}</div>
         </div>
       </div>
     </aside>

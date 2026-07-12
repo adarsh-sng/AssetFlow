@@ -1,88 +1,182 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Search, Plus, SlidersHorizontal, ChevronDown } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Search, Plus, SlidersHorizontal, ChevronDown, X } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
-
-interface Resource {
-  id: string
-  name: string
-  type: 'ROOM' | 'EQUIPMENT'
-}
-
-interface Booking {
-  id: string
-  resourceId: string
-  resourceName: string
-  bookedBy: string
-  department: string
-  date: string
-  startTime: string
-  endTime: string
-  status: 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED'
-}
-
-const mockResources: Resource[] = [
-  { id: 'r1', name: 'Conference Room B2', type: 'ROOM' },
-  { id: 'r2', name: 'Conference Room A1', type: 'ROOM' },
-  { id: 'r3', name: 'Meeting Room C3', type: 'ROOM' },
-]
-
-const mockBookings: Booking[] = [
-  { id: 'b1', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Procurement Team', department: 'Procurement', date: '2026-07-07', startTime: '09:00', endTime: '10:00', status: 'UPCOMING' },
-  { id: 'b2', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Raj Kumar', department: 'Marketing', date: '2026-07-07', startTime: '11:00', endTime: '12:00', status: 'UPCOMING' },
-  { id: 'b3', resourceId: 'r2', resourceName: 'Conference Room A1', bookedBy: 'Priya Shah', department: 'Engineering', date: '2026-07-07', startTime: '14:00', endTime: '15:30', status: 'UPCOMING' },
-  { id: 'b4', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Anita Desai', department: 'HR', date: '2026-07-05', startTime: '10:00', endTime: '11:00', status: 'COMPLETED' },
-]
+import { api } from '../lib/api'
+import type { ServerBooking, ServerAsset } from '../lib/types'
 
 const timeSlots = ['9:00', '10:00', '11:00', '12:00', '1:00', '2:00', '3:00', '4:00', '5:00']
 
-const filters = ['Status', 'Resource', 'Department']
-
 export function BookingPage() {
   const [search, setSearch] = useState('')
-  const [selectedResource, setSelectedResource] = useState('r1')
-  const [selectedDate, setSelectedDate] = useState('2026-07-07')
+  const [selectedResource, setSelectedResource] = useState('')
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [showBook, setShowBook] = useState(false)
+  const [bookForm, setBookForm] = useState({ assetId: '', title: '', startTime: '', endTime: '' })
+  const queryClient = useQueryClient()
 
-  const { data: bookings = mockBookings } = useQuery<Booking[]>({
+  const { data: bookableAssets = [] } = useQuery<ServerAsset[]>({
+    queryKey: queryKeys.assets.list({ bookable: true }),
+    queryFn: () => api.get<ServerAsset[]>('/assets?bookable=true'),
+  })
+
+  const { data: bookings = [], isLoading, error } = useQuery<ServerBooking[]>({
     queryKey: queryKeys.bookings.list({ search, resource: selectedResource, date: selectedDate }),
-    queryFn: async () => {
-      const res = await fetch(`/api/bookings?q=${search}&resource=${selectedResource}&date=${selectedDate}`)
-      if (!res.ok) return mockBookings
-      return res.json()
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (selectedResource) params.set('assetId', selectedResource)
+      return api.get<ServerBooking[]>(`/bookings?${params.toString()}`)
     },
-    initialData: mockBookings,
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof bookForm) => {
+      const startsAt = new Date(`${selectedDate}T${data.startTime}:00`).toISOString()
+      const endsAt = new Date(`${selectedDate}T${data.endTime}:00`).toISOString()
+      return api.post('/bookings', {
+        assetId: data.assetId,
+        title: data.title,
+        startsAt,
+        endsAt,
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all })
+      setShowBook(false)
+      setBookForm({ assetId: '', title: '', startTime: '', endTime: '' })
+    },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (bookingId: string) => api.patch(`/bookings/${bookingId}/cancel`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all })
+    },
   })
 
   const filteredBookings = bookings.filter(
-    (b) => b.resourceId === selectedResource && b.date === selectedDate
+    (b) => (!selectedResource || b.assetId === selectedResource) && b.startsAt.startsWith(selectedDate)
   )
 
   const getSlotBooking = (time: string) => {
     const [slotHour] = time.split(':').map(Number)
     return filteredBookings.find((b) => {
-      const [startH] = b.startTime.split(':').map(Number)
-      const [endH] = b.endTime.split(':').map(Number)
+      const startH = new Date(b.startsAt).getHours()
+      const endH = new Date(b.endsAt).getHours()
       return slotHour >= startH && slotHour < endH
     })
   }
 
-  const selectedResourceName = mockResources.find((r) => r.id === selectedResource)?.name || ''
+  const selectedResourceName = bookableAssets.find((r) => r.id === selectedResource)?.name || ''
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
   }
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-serif text-4xl font-light">Resource Booking</h1>
+        <div className="border border-border-subtle bg-white p-8 shadow-custom">
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 bg-foreground/5 animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-serif text-4xl font-light">Resource Booking</h1>
+        <div className="border border-accent/30 bg-accent/10 px-5 py-4">
+          <p className="text-sm font-medium text-accent">
+            Unable to load bookings. Please ensure the server is running.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <h1 className="font-serif text-4xl font-light">Resource Booking</h1>
-        <button className="flex items-center gap-2 bg-accent px-4 py-2.5 text-2xs font-bold uppercase tracking-widest text-white hover:bg-accent/90 transition-colors">
-          <Plus size={14} />
-          Book a slot
+        <button
+          onClick={() => setShowBook(!showBook)}
+          className="flex items-center gap-2 bg-accent px-4 py-2.5 text-2xs font-bold uppercase tracking-widest text-white hover:bg-accent/90 transition-colors"
+        >
+          {showBook ? <X size={14} /> : <Plus size={14} />}
+          {showBook ? 'Cancel' : 'Book a slot'}
         </button>
       </div>
+
+      {showBook && (
+        <div className="border border-border-subtle bg-white p-5 shadow-custom space-y-4">
+          <h3 className="text-2xs font-bold uppercase tracking-widest text-foreground/50">New Booking</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">Resource</label>
+              <div className="relative">
+                <select
+                  value={bookForm.assetId}
+                  onChange={(e) => setBookForm({ ...bookForm, assetId: e.target.value })}
+                  className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
+                >
+                  <option value="">Select Resource...</option>
+                  {bookableAssets.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">Title</label>
+              <input
+                type="text"
+                value={bookForm.title}
+                onChange={(e) => setBookForm({ ...bookForm, title: e.target.value })}
+                className="w-full border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
+                placeholder="Meeting title"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">Start Time</label>
+              <input
+                type="time"
+                value={bookForm.startTime}
+                onChange={(e) => setBookForm({ ...bookForm, startTime: e.target.value })}
+                className="w-full border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">End Time</label>
+              <input
+                type="time"
+                value={bookForm.endTime}
+                onChange={(e) => setBookForm({ ...bookForm, endTime: e.target.value })}
+                className="w-full border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
+              />
+            </div>
+          </div>
+          <button
+            onClick={() => createMutation.mutate(bookForm)}
+            disabled={!bookForm.assetId || !bookForm.title || !bookForm.startTime || !bookForm.endTime || createMutation.isPending}
+            className="bg-accent px-5 py-2.5 text-2xs font-bold uppercase tracking-widest text-white hover:bg-accent/90 transition-colors disabled:opacity-50"
+          >
+            {createMutation.isPending ? 'Booking...' : 'Book'}
+          </button>
+          {createMutation.isError && (
+            <p className="text-sm text-accent">Failed to create booking. The time slot may be conflicting.</p>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-4">
         <div className="flex flex-1 items-center gap-3 border border-border-subtle bg-white px-4 py-3">
@@ -102,7 +196,7 @@ export function BookingPage() {
       </div>
 
       <div className="flex gap-2">
-        {filters.map((f) => (
+        {['Status', 'Resource', 'Department'].map((f) => (
           <button
             key={f}
             className="border border-border-subtle bg-white px-3 py-1.5 text-2xs font-bold uppercase tracking-widest text-foreground/50 hover:text-foreground transition-colors"
@@ -121,7 +215,8 @@ export function BookingPage() {
               onChange={(e) => setSelectedResource(e.target.value)}
               className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
             >
-              {mockResources.map((r) => (
+              <option value="">All Resources</option>
+              {bookableAssets.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </select>
@@ -141,7 +236,7 @@ export function BookingPage() {
 
       <div className="border border-border-subtle bg-white shadow-custom">
         <div className="border-b border-border-subtle px-5 py-3">
-          <span className="text-sm font-bold">{selectedResourceName}</span>
+          <span className="text-sm font-bold">{selectedResourceName || 'All Resources'}</span>
           <span className="ml-2 text-sm text-foreground/60">- {formatDate(selectedDate)}</span>
         </div>
 
@@ -154,8 +249,10 @@ export function BookingPage() {
                 <div className="flex-1">
                   {booking ? (
                     <div className="border border-foreground/20 bg-foreground/5 px-4 py-2">
-                      <span className="text-sm font-medium">Booked - {booking.bookedBy}</span>
-                      <span className="ml-2 text-sm text-foreground/60">- {booking.startTime} to {booking.endTime}</span>
+                      <span className="text-sm font-medium">Booked - {booking.requestedBy?.name ?? 'Unknown'}</span>
+                      <span className="ml-2 text-sm text-foreground/60">
+                        - {new Date(booking.startsAt).getHours()}:00 to {new Date(booking.endsAt).getHours()}:00
+                      </span>
                     </div>
                   ) : (
                     <div className="border border-transparent px-4 py-2">
@@ -178,24 +275,37 @@ export function BookingPage() {
               <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Date</th>
               <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Time</th>
               <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Status</th>
+              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredBookings.map((b) => (
               <tr key={b.id} className="hover:bg-background transition-colors cursor-pointer">
-                <td className="px-5 py-4 text-sm font-medium">{b.resourceName}</td>
+                <td className="px-5 py-4 text-sm font-medium">{b.asset.name}</td>
                 <td className="px-5 py-4">
-                  <span className="text-sm">{b.bookedBy}</span>
-                  <span className="ml-2 text-xs text-foreground/40">{b.department}</span>
+                  <span className="text-sm">{b.requestedBy?.name ?? '—'}</span>
                 </td>
                 <td className="px-5 py-4 text-sm text-foreground/60">
-                  {new Date(b.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {new Date(b.startsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </td>
-                <td className="px-5 py-4 text-sm text-foreground/60">{b.startTime} - {b.endTime}</td>
+                <td className="px-5 py-4 text-sm text-foreground/60">
+                  {new Date(b.startsAt).getHours()}:00 - {new Date(b.endsAt).getHours()}:00
+                </td>
                 <td className="px-5 py-4">
-                  <StatusPill variant={b.status === 'UPCOMING' ? 'active' : b.status === 'ONGOING' ? 'warning' : 'outlined'}>
+                  <StatusPill variant={b.status === 'UPCOMING' ? 'active' : b.status === 'ONGOING' ? 'warning' : b.status === 'CANCELLED' ? 'outlined' : 'outlined'}>
                     {b.status}
                   </StatusPill>
+                </td>
+                <td className="px-5 py-4">
+                  {b.status === 'UPCOMING' && (
+                    <button
+                      onClick={() => cancelMutation.mutate(b.id)}
+                      disabled={cancelMutation.isPending}
+                      className="border border-border-subtle px-3 py-1.5 text-2xs font-bold uppercase tracking-widest text-foreground/60 hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
