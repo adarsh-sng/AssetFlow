@@ -1,24 +1,35 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { api } from '../lib/api'
 import { queryKeys } from '../lib/query-keys'
 
 type NotificationFilter = 'ALL' | 'ALERTS' | 'APPROVALS' | 'BOOKINGS'
+
+type ApiNotificationType =
+  | 'ASSET'
+  | 'BOOKING'
+  | 'MAINTENANCE'
+  | 'TRANSFER'
+  | 'AUDIT'
+  | 'OVERDUE'
+  | 'SYSTEM'
+
+interface ApiNotification {
+  id: string
+  title: string
+  message: string
+  type: ApiNotificationType
+  createdAt: string
+  readAt: string | null
+}
 
 interface Notification {
   id: string
   message: string
   timestamp: string
-  type: 'allocation' | 'maintenance' | 'booking' | 'transfer' | 'overdue' | 'audit'
+  type: Lowercase<ApiNotificationType>
+  unread: boolean
 }
-
-const mockNotifications: Notification[] = [
-  { id: '1', message: 'Laptop AF-0014 assigned to Priya Shah', timestamp: '2m ago', type: 'allocation' },
-  { id: '2', message: 'Maintenance request AF-0055 approved', timestamp: '18m ago', type: 'maintenance' },
-  { id: '3', message: 'Booking confirmed: Room B2: 2:00 to 3:00 PM', timestamp: '1h ago', type: 'booking' },
-  { id: '4', message: 'Transfer approved: AF-0033 to facilities dept', timestamp: '3h ago', type: 'transfer' },
-  { id: '5', message: 'Overdue return: AF-0021 was due 3 days ago', timestamp: '1d ago', type: 'overdue' },
-  { id: '6', message: 'Audit discrepancy flagged: AF-0088 damaged', timestamp: '2d ago', type: 'audit' },
-]
 
 const filterTabs: { key: NotificationFilter; label: string }[] = [
   { key: 'ALL', label: 'All' },
@@ -28,30 +39,49 @@ const filterTabs: { key: NotificationFilter; label: string }[] = [
 ]
 
 const typeColor: Record<string, string> = {
-  allocation: 'bg-foreground',
+  asset: 'bg-foreground',
   maintenance: 'bg-accent',
   booking: 'bg-foreground',
   transfer: 'bg-accent',
   overdue: 'bg-orange-500',
   audit: 'bg-orange-500',
+  system: 'bg-foreground/50',
+}
+
+function formatTimestamp(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
 }
 
 export function NotificationsPage() {
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('ALL')
 
-  const { data: notifications = mockNotifications } = useQuery<Notification[]>({
+  const { data: apiNotifications = [] } = useQuery<ApiNotification[]>({
     queryKey: queryKeys.notifications.list({ filter: activeFilter }),
-    queryFn: async () => {
-      const res = await fetch(`/api/notifications?filter=${activeFilter}`)
-      if (!res.ok) return mockNotifications
-      return res.json()
-    },
-    initialData: mockNotifications,
+    queryFn: () => api.get<ApiNotification[]>('/notifications'),
+    refetchInterval: 10000,
   })
+
+  const notifications = useMemo<Notification[]>(
+    () =>
+      apiNotifications.map((notification) => ({
+        id: notification.id,
+        message: `${notification.title}: ${notification.message}`,
+        timestamp: formatTimestamp(notification.createdAt),
+        type: notification.type.toLowerCase() as Lowercase<ApiNotificationType>,
+        unread: !notification.readAt,
+      })),
+    [apiNotifications]
+  )
 
   const filteredNotifications = notifications.filter((n) => {
     if (activeFilter === 'ALL') return true
-    if (activeFilter === 'ALERTS') return n.type === 'overdue' || n.type === 'audit'
+    if (activeFilter === 'ALERTS') return n.type === 'overdue' || n.type === 'audit' || n.type === 'system'
     if (activeFilter === 'APPROVALS') return n.type === 'maintenance' || n.type === 'transfer'
     if (activeFilter === 'BOOKINGS') return n.type === 'booking'
     return true
@@ -80,11 +110,14 @@ export function NotificationsPage() {
       </div>
 
       <div className="border border-border-subtle bg-white shadow-custom divide-y divide-border-subtle">
+        {filteredNotifications.length === 0 && (
+          <div className="px-5 py-8 text-sm text-foreground/40">No notifications found.</div>
+        )}
         {filteredNotifications.map((n) => (
           <div key={n.id} className="flex items-center justify-between px-5 py-4 hover:bg-background transition-colors cursor-pointer">
             <div className="flex items-center gap-4">
               <span className={`block size-2 flex-shrink-0 ${typeColor[n.type]}`} />
-              <span className="text-sm">
+              <span className={`text-sm ${n.unread ? 'font-medium' : ''}`}>
                 {n.message.split(/(AF-\d+)/).map((part, i) =>
                   part.match(/AF-\d+/) ? (
                     <strong key={i} className="font-bold">{part}</strong>

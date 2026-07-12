@@ -1,10 +1,30 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Plus, SlidersHorizontal, AlertTriangle } from 'lucide-react'
+import { Search, Plus, SlidersHorizontal, AlertTriangle, ChevronDown } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
+import { api } from '../lib/api'
 import { queryKeys } from '../lib/query-keys'
 
-type VerificationStatus = 'VERIFIED' | 'MISSING' | 'DAMAGED'
+type VerificationStatus = 'PENDING' | 'VERIFIED' | 'MISSING' | 'DAMAGED'
+
+interface ApiAuditCycle {
+  id: string
+  name: string
+  status: 'DRAFT' | 'ACTIVE' | 'CLOSED'
+  startsAt: string
+  endsAt: string
+  department?: { name: string } | null
+  assignments?: Array<{ auditor?: { name: string } | null }>
+}
+
+interface ApiAuditDetail extends ApiAuditCycle {
+  items: Array<{
+    id: string
+    expectedLocation: string | null
+    status: VerificationStatus
+    asset?: { tag: string; name: string } | null
+  }>
+}
 
 interface AuditItem {
   id: string
@@ -14,48 +34,70 @@ interface AuditItem {
   verification: VerificationStatus
 }
 
-interface AuditCycle {
-  id: string
-  name: string
-  department: string
-  dateRange: string
-  auditors: string[]
-  status: 'IN_PROGRESS' | 'COMPLETED'
-}
-
-const mockAuditCycle: AuditCycle = {
-  id: '1',
-  name: 'Q3 audit',
-  department: 'Engineering dept',
-  dateRange: '1-15 Jul',
-  auditors: ['A. Rao', 'S. Iqbal'],
-  status: 'IN_PROGRESS',
-}
-
-const mockItems: AuditItem[] = [
-  { id: '1', assetTag: 'AF-003', assetName: 'Dell Laptop', expectedLocation: 'Desk E12', verification: 'VERIFIED' },
-  { id: '2', assetTag: 'AF-9921', assetName: 'Office Chair', expectedLocation: 'Desk E14', verification: 'MISSING' },
-  { id: '3', assetTag: 'AF-9838', assetName: 'Monitor', expectedLocation: 'Desk E15', verification: 'DAMAGED' },
-  { id: '4', assetTag: 'AF-0078', assetName: 'Keyboard', expectedLocation: 'Desk E11', verification: 'VERIFIED' },
-  { id: '5', assetTag: 'AF-0112', assetName: 'Webcam', expectedLocation: 'Desk E13', verification: 'VERIFIED' },
-]
-
 const filters = ['Status', 'Location', 'Department']
+
+function dateRange(audit: ApiAuditCycle) {
+  const start = new Date(audit.startsAt).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+  })
+  const end = new Date(audit.endsAt).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+  })
+  return `${start} - ${end}`
+}
 
 export function AuditPage() {
   const [search, setSearch] = useState('')
+  const [selectedAuditId, setSelectedAuditId] = useState('')
 
-  const { data: items = mockItems } = useQuery<AuditItem[]>({
-    queryKey: queryKeys.audits.list({ search }),
-    queryFn: async () => {
-      const res = await fetch(`/api/audits?q=${search}`)
-      if (!res.ok) return mockItems
-      return res.json()
-    },
-    initialData: mockItems,
+  const { data: audits = [] } = useQuery<ApiAuditCycle[]>({
+    queryKey: queryKeys.audits.list({ view: 'cycles' }),
+    queryFn: () => api.get<ApiAuditCycle[]>('/audits'),
+    refetchInterval: 15000,
   })
 
-  const flaggedCount = items.filter((i) => i.verification !== 'VERIFIED').length
+  useEffect(() => {
+    if (!selectedAuditId && audits[0]) {
+      setSelectedAuditId(audits[0].id)
+    }
+  }, [audits, selectedAuditId])
+
+  const { data: auditDetail } = useQuery<ApiAuditDetail>({
+    queryKey: [...queryKeys.audits.list({ view: 'detail' }), selectedAuditId],
+    queryFn: () => api.get<ApiAuditDetail>(`/audits/${selectedAuditId}`),
+    enabled: selectedAuditId.length > 0,
+    refetchInterval: 10000,
+  })
+
+  const selectedAudit = auditDetail ?? audits.find((audit) => audit.id === selectedAuditId)
+
+  const items = useMemo<AuditItem[]>(
+    () =>
+      (auditDetail?.items ?? [])
+        .map((item) => ({
+          id: item.id,
+          assetTag: item.asset?.tag ?? '-',
+          assetName: item.asset?.name ?? '-',
+          expectedLocation: item.expectedLocation ?? '-',
+          verification: item.status,
+        }))
+        .filter((item) => {
+          const haystack = [item.assetTag, item.assetName, item.expectedLocation, item.verification]
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(search.toLowerCase())
+        }),
+    [auditDetail, search]
+  )
+
+  const flaggedCount = items.filter((i) => i.verification !== 'VERIFIED' && i.verification !== 'PENDING').length
+  const auditors =
+    selectedAudit?.assignments
+      ?.map((assignment) => assignment.auditor?.name)
+      .filter(Boolean)
+      .join(', ') || '-'
 
   return (
     <div className="space-y-6">
@@ -95,9 +137,34 @@ export function AuditPage() {
         ))}
       </div>
 
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">Audit cycle</label>
+          <div className="relative">
+            <select
+              value={selectedAuditId}
+              onChange={(e) => setSelectedAuditId(e.target.value)}
+              className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
+            >
+              {audits.length === 0 && <option value="">No audit cycles</option>}
+              {audits.map((audit) => (
+                <option key={audit.id} value={audit.id}>
+                  {audit.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40" />
+          </div>
+        </div>
+      </div>
+
       <div className="border border-border-subtle bg-background px-5 py-4">
-        <div className="text-sm font-bold">{mockAuditCycle.name}: {mockAuditCycle.department} - {mockAuditCycle.dateRange}</div>
-        <div className="mt-1 text-xs text-foreground/50">Auditors: {mockAuditCycle.auditors.join(', ')}</div>
+        <div className="text-sm font-bold">
+          {selectedAudit
+            ? `${selectedAudit.name}: ${selectedAudit.department?.name ?? 'All departments'} - ${dateRange(selectedAudit)}`
+            : 'No audit cycle selected'}
+        </div>
+        <div className="mt-1 text-xs text-foreground/50">Auditors: {auditors}</div>
       </div>
 
       <div className="border border-border-subtle bg-white shadow-custom">
@@ -110,6 +177,13 @@ export function AuditPage() {
             </tr>
           </thead>
           <tbody>
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-5 py-8 text-sm text-foreground/40">
+                  No audit items found.
+                </td>
+              </tr>
+            )}
             {items.map((item) => (
               <tr key={item.id} className="hover:bg-background transition-colors cursor-pointer">
                 <td className="px-5 py-4">
