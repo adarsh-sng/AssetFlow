@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
 import { PrismaClient } from '@prisma/client'
-import { PrismaNeon } from '@prisma/adapter-neon'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 const databaseUrl =
     process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/assetflow'
 
 const prisma = new PrismaClient({
-    adapter: new PrismaNeon({ connectionString: databaseUrl }),
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
 })
 
 const passwordHash = (password) => `sha256:${createHash('sha256').update(password).digest('hex')}`
