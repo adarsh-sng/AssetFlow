@@ -29,17 +29,29 @@ export const queryKeys = {
   bookings: {
     all: ['bookings'] as const,
     lists: () => [...queryKeys.bookings.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.bookings.lists(), filters] as const,
   },
   maintenance: {
     all: ['maintenance'] as const,
     lists: () => [...queryKeys.maintenance.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.maintenance.lists(), filters] as const,
   },
   audits: {
     all: ['audits'] as const,
     lists: () => [...queryKeys.audits.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.audits.lists(), filters] as const,
   },
   notifications: {
     all: ['notifications'] as const,
     lists: () => [...queryKeys.notifications.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.notifications.lists(), filters] as const,
+  },
+  reports: {
+    all: ['reports'] as const,
+    lists: () => [...queryKeys.reports.all, 'list'] as const,
   },
 } as const
