@@ -4,7 +4,16 @@ import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import { ZodError } from 'zod'
+import { allocationRoutes } from './routes/allocations.ts'
+import { assetRoutes } from './routes/assets.ts'
+import { auditRoutes } from './routes/audits.ts'
 import { authRoutes } from './routes/auth.ts'
+import { bookingRoutes } from './routes/bookings.ts'
+import { dashboardRoutes } from './routes/dashboard.ts'
+import { maintenanceRoutes } from './routes/maintenance.ts'
+import { notificationRoutes } from './routes/notifications.ts'
+import { organizationRoutes } from './routes/organization.ts'
+import { reportRoutes } from './routes/reports.ts'
 
 const app = express()
 
@@ -35,6 +44,15 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes)
+app.use('/api/dashboard', dashboardRoutes)
+app.use('/api/organization', organizationRoutes)
+app.use('/api/assets', assetRoutes)
+app.use('/api/allocations', allocationRoutes)
+app.use('/api/bookings', bookingRoutes)
+app.use('/api/maintenance', maintenanceRoutes)
+app.use('/api/audits', auditRoutes)
+app.use('/api/reports', reportRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // 404 handler
 app.use((req, res) => {
