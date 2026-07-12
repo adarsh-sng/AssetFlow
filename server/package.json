@@ -10,21 +10,26 @@
     "prisma:generate": "prisma generate --config prisma.config.ts",
     "prisma:migrate": "prisma migrate dev --config prisma.config.ts",
     "prisma:seed": "node prisma/seed.js",
-    "prisma:studio": "prisma studio --config prisma.config.ts"
+    "prisma:studio": "prisma studio --config prisma.config.ts",
+    "db:up": "docker compose up -d",
+    "db:setup": "npm run prisma:migrate && npm run prisma:seed"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@neondatabase/serverless": "^1.1.0",
-    "@prisma/adapter-neon": "^7.8.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.2.0",
     "cors": "^2.8.6",
     "custom-env": "^2.0.6",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "morgan": "^1.10.1",
+    "pg": "^8.22.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -3,59 +3,30 @@ import { useQuery } from '@tanstack/react-query'
 import { Search, Plus, SlidersHorizontal, AlertTriangle } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
-
-type VerificationStatus = 'VERIFIED' | 'MISSING' | 'DAMAGED'
-
-interface AuditItem {
-  id: string
-  assetTag: string
-  assetName: string
-  expectedLocation: string
-  verification: VerificationStatus
-}
-
-interface AuditCycle {
-  id: string
-  name: string
-  department: string
-  dateRange: string
-  auditors: string[]
-  status: 'IN_PROGRESS' | 'COMPLETED'
-}
-
-const mockAuditCycle: AuditCycle = {
-  id: '1',
-  name: 'Q3 audit',
-  department: 'Engineering dept',
-  dateRange: '1-15 Jul',
-  auditors: ['A. Rao', 'S. Iqbal'],
-  status: 'IN_PROGRESS',
-}
-
-const mockItems: AuditItem[] = [
-  { id: '1', assetTag: 'AF-003', assetName: 'Dell Laptop', expectedLocation: 'Desk E12', verification: 'VERIFIED' },
-  { id: '2', assetTag: 'AF-9921', assetName: 'Office Chair', expectedLocation: 'Desk E14', verification: 'MISSING' },
-  { id: '3', assetTag: 'AF-9838', assetName: 'Monitor', expectedLocation: 'Desk E15', verification: 'DAMAGED' },
-  { id: '4', assetTag: 'AF-0078', assetName: 'Keyboard', expectedLocation: 'Desk E11', verification: 'VERIFIED' },
-  { id: '5', assetTag: 'AF-0112', assetName: 'Webcam', expectedLocation: 'Desk E13', verification: 'VERIFIED' },
-]
+import { fetchActiveAudit } from '../lib/services'
 
 const filters = ['Status', 'Location', 'Department']
 
 export function AuditPage() {
   const [search, setSearch] = useState('')
 
-  const { data: items = mockItems } = useQuery<AuditItem[]>({
+  const { data, isLoading } = useQuery({
     queryKey: queryKeys.audits.list({ search }),
-    queryFn: async () => {
-      const res = await fetch(`/api/audits?q=${search}`)
-      if (!res.ok) return mockItems
-      return res.json()
-    },
-    initialData: mockItems,
+    queryFn: fetchActiveAudit,
   })
 
-  const flaggedCount = items.filter((i) => i.verification !== 'VERIFIED').length
+  const cycle = data?.cycle
+  const items = (data?.items ?? []).filter((item) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (
+      item.assetTag.toLowerCase().includes(q) ||
+      item.assetName.toLowerCase().includes(q) ||
+      item.expectedLocation.toLowerCase().includes(q)
+    )
+  })
+
+  const flaggedCount = items.filter((i) => i.verification !== 'VERIFIED' && i.verification !== 'PENDING').length
 
   return (
     <div className="space-y-6">
@@ -95,45 +66,57 @@ export function AuditPage() {
         ))}
       </div>
 
-      <div className="border border-border-subtle bg-background px-5 py-4">
-        <div className="text-sm font-bold">{mockAuditCycle.name}: {mockAuditCycle.department} - {mockAuditCycle.dateRange}</div>
-        <div className="mt-1 text-xs text-foreground/50">Auditors: {mockAuditCycle.auditors.join(', ')}</div>
-      </div>
+      {cycle ? (
+        <div className="border border-border-subtle bg-background px-5 py-4">
+          <div className="text-sm font-bold">{cycle.name}: {cycle.department} - {cycle.dateRange}</div>
+          <div className="mt-1 text-xs text-foreground/50">Auditors: {cycle.auditors.join(', ')}</div>
+        </div>
+      ) : !isLoading ? (
+        <div className="border border-border-subtle bg-background px-5 py-4 text-sm text-foreground/50">
+          No active audit cycle.
+        </div>
+      ) : null}
 
       <div className="border border-border-subtle bg-white shadow-custom">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border-subtle text-left">
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Asset</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Expected Location</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Verification</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="hover:bg-background transition-colors cursor-pointer">
-                <td className="px-5 py-4">
-                  <span className="text-sm font-bold">{item.assetTag}</span>
-                  <span className="ml-2 text-sm text-foreground/60">{item.assetName}</span>
-                </td>
-                <td className="px-5 py-4 text-sm text-foreground/60">{item.expectedLocation}</td>
-                <td className="px-5 py-4">
-                  <StatusPill
-                    variant={
-                      item.verification === 'VERIFIED'
-                        ? 'active'
-                        : item.verification === 'MISSING'
-                        ? 'warning'
-                        : 'outlined'
-                    }
-                  >
-                    {item.verification}
-                  </StatusPill>
-                </td>
+        {isLoading ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">Loading audit items...</p>
+        ) : items.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">No audit items found.</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border-subtle text-left">
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Asset</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Expected Location</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Verification</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="hover:bg-background transition-colors cursor-pointer">
+                  <td className="px-5 py-4">
+                    <span className="text-sm font-bold">{item.assetTag}</span>
+                    <span className="ml-2 text-sm text-foreground/60">{item.assetName}</span>
+                  </td>
+                  <td className="px-5 py-4 text-sm text-foreground/60">{item.expectedLocation}</td>
+                  <td className="px-5 py-4">
+                    <StatusPill
+                      variant={
+                        item.verification === 'VERIFIED'
+                          ? 'active'
+                          : item.verification === 'MISSING'
+                          ? 'warning'
+                          : 'outlined'
+                      }
+                    >
+                      {item.verification}
+                    </StatusPill>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {flaggedCount > 0 && (

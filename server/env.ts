@@ -50,7 +50,7 @@ const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .startsWith('postgresql://')
-    .default('postgresql://postgres:postgres@localhost:5432/assetflow'),
+    .default('postgresql://postgres:postgres@localhost:5433/assetflow'),
   DATABASE_POOL_MIN: z.coerce.number().min(0).default(2),
   DATABASE_POOL_MAX: z.coerce.number().positive().default(10),
 

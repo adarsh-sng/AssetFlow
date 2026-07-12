@@ -1,13 +1,27 @@
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { env as loadEnv } from 'custom-env'
 import { PrismaClient } from '@prisma/client'
-import { PrismaNeon } from '@prisma/adapter-neon'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { Pool } from 'pg'
+
+const loadCustomEnv = loadEnv
+
+const serverDir = dirname(fileURLToPath(import.meta.url))
+const rootDir = join(serverDir, '..')
+
+if (existsSync(join(rootDir, '.env'))) {
+    loadCustomEnv(undefined, rootDir)
+}
 
 const databaseUrl =
-    process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/assetflow'
+    process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5433/assetflow'
 
-const prisma = new PrismaClient({
-    adapter: new PrismaNeon({ connectionString: databaseUrl }),
-})
+const pool = new Pool({ connectionString: databaseUrl })
+const adapter = new PrismaPg(pool)
+const prisma = new PrismaClient({ adapter })
 
 const passwordHash = (password) => `sha256:${createHash('sha256').update(password).digest('hex')}`
 

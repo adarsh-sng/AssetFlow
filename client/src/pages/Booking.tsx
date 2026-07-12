@@ -1,39 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Plus, SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
-
-interface Resource {
-  id: string
-  name: string
-  type: 'ROOM' | 'EQUIPMENT'
-}
-
-interface Booking {
-  id: string
-  resourceId: string
-  resourceName: string
-  bookedBy: string
-  department: string
-  date: string
-  startTime: string
-  endTime: string
-  status: 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED'
-}
-
-const mockResources: Resource[] = [
-  { id: 'r1', name: 'Conference Room B2', type: 'ROOM' },
-  { id: 'r2', name: 'Conference Room A1', type: 'ROOM' },
-  { id: 'r3', name: 'Meeting Room C3', type: 'ROOM' },
-]
-
-const mockBookings: Booking[] = [
-  { id: 'b1', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Procurement Team', department: 'Procurement', date: '2026-07-07', startTime: '09:00', endTime: '10:00', status: 'UPCOMING' },
-  { id: 'b2', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Raj Kumar', department: 'Marketing', date: '2026-07-07', startTime: '11:00', endTime: '12:00', status: 'UPCOMING' },
-  { id: 'b3', resourceId: 'r2', resourceName: 'Conference Room A1', bookedBy: 'Priya Shah', department: 'Engineering', date: '2026-07-07', startTime: '14:00', endTime: '15:30', status: 'UPCOMING' },
-  { id: 'b4', resourceId: 'r1', resourceName: 'Conference Room B2', bookedBy: 'Anita Desai', department: 'HR', date: '2026-07-05', startTime: '10:00', endTime: '11:00', status: 'COMPLETED' },
-]
+import { fetchBookableResources, fetchBookings } from '../lib/services'
 
 const timeSlots = ['9:00', '10:00', '11:00', '12:00', '1:00', '2:00', '3:00', '4:00', '5:00']
 
@@ -41,17 +11,23 @@ const filters = ['Status', 'Resource', 'Department']
 
 export function BookingPage() {
   const [search, setSearch] = useState('')
-  const [selectedResource, setSelectedResource] = useState('r1')
-  const [selectedDate, setSelectedDate] = useState('2026-07-07')
+  const [selectedResource, setSelectedResource] = useState('')
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
 
-  const { data: bookings = mockBookings } = useQuery<Booking[]>({
+  const { data: resources = [] } = useQuery({
+    queryKey: [...queryKeys.assets.lists(), 'bookable'],
+    queryFn: fetchBookableResources,
+  })
+
+  useEffect(() => {
+    if (!selectedResource && resources.length > 0) {
+      setSelectedResource(resources[0].id)
+    }
+  }, [resources, selectedResource])
+
+  const { data: bookings = [], isLoading } = useQuery({
     queryKey: queryKeys.bookings.list({ search, resource: selectedResource, date: selectedDate }),
-    queryFn: async () => {
-      const res = await fetch(`/api/bookings?q=${search}&resource=${selectedResource}&date=${selectedDate}`)
-      if (!res.ok) return mockBookings
-      return res.json()
-    },
-    initialData: mockBookings,
+    queryFn: () => fetchBookings(search),
   })
 
   const filteredBookings = bookings.filter(
@@ -59,15 +35,17 @@ export function BookingPage() {
   )
 
   const getSlotBooking = (time: string) => {
-    const [slotHour] = time.split(':').map(Number)
-    return filteredBookings.find((b) => {
-      const [startH] = b.startTime.split(':').map(Number)
-      const [endH] = b.endTime.split(':').map(Number)
-      return slotHour >= startH && slotHour < endH
-    })
+    const slotHour = Number(time.split(':')[0])
+    const normalizedSlot = time.startsWith('1:') && !time.startsWith('10:') && !time.startsWith('11:') && !time.startsWith('12:')
+      ? slotHour + 12
+      : slotHour
+
+    return filteredBookings.find(
+      (b) => normalizedSlot >= b.startHour && normalizedSlot < b.endHour
+    )
   }
 
-  const selectedResourceName = mockResources.find((r) => r.id === selectedResource)?.name || ''
+  const selectedResourceName = resources.find((r) => r.id === selectedResource)?.name || ''
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -121,9 +99,13 @@ export function BookingPage() {
               onChange={(e) => setSelectedResource(e.target.value)}
               className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
             >
-              {mockResources.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
+              {resources.length === 0 ? (
+                <option value="">No bookable resources</option>
+              ) : (
+                resources.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))
+              )}
             </select>
             <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40" />
           </div>
@@ -170,37 +152,43 @@ export function BookingPage() {
       </div>
 
       <div className="border border-border-subtle bg-white shadow-custom">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border-subtle text-left">
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Resource</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Booked By</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Date</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Time</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredBookings.map((b) => (
-              <tr key={b.id} className="hover:bg-background transition-colors cursor-pointer">
-                <td className="px-5 py-4 text-sm font-medium">{b.resourceName}</td>
-                <td className="px-5 py-4">
-                  <span className="text-sm">{b.bookedBy}</span>
-                  <span className="ml-2 text-xs text-foreground/40">{b.department}</span>
-                </td>
-                <td className="px-5 py-4 text-sm text-foreground/60">
-                  {new Date(b.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </td>
-                <td className="px-5 py-4 text-sm text-foreground/60">{b.startTime} - {b.endTime}</td>
-                <td className="px-5 py-4">
-                  <StatusPill variant={b.status === 'UPCOMING' ? 'active' : b.status === 'ONGOING' ? 'warning' : 'outlined'}>
-                    {b.status}
-                  </StatusPill>
-                </td>
+        {isLoading ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">Loading bookings...</p>
+        ) : filteredBookings.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">No bookings for this date.</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border-subtle text-left">
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Resource</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Booked By</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Date</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Time</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredBookings.map((b) => (
+                <tr key={b.id} className="hover:bg-background transition-colors cursor-pointer">
+                  <td className="px-5 py-4 text-sm font-medium">{b.resourceName}</td>
+                  <td className="px-5 py-4">
+                    <span className="text-sm">{b.bookedBy}</span>
+                    <span className="ml-2 text-xs text-foreground/40">{b.department}</span>
+                  </td>
+                  <td className="px-5 py-4 text-sm text-foreground/60">
+                    {new Date(b.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </td>
+                  <td className="px-5 py-4 text-sm text-foreground/60">{b.startTime} - {b.endTime}</td>
+                  <td className="px-5 py-4">
+                    <StatusPill variant={b.status === 'UPCOMING' ? 'active' : b.status === 'ONGOING' ? 'warning' : 'outlined'}>
+                      {b.status}
+                    </StatusPill>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )

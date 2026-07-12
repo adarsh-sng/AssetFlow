@@ -63,8 +63,25 @@ async function activeAllocation(assetId: string) {
 router.get(
   '/',
   asyncRoute(async (req, res) => {
+    const query = z
+      .object({
+        q: z.string().optional(),
+        status: z.string().optional(),
+      })
+      .parse(req.query)
+
     const allocations = await prisma.assetAllocation.findMany({
-      where: { status: req.query.status as never },
+      where: {
+        status: query.status as never,
+        OR: query.q
+          ? [
+              { asset: { tag: { contains: query.q, mode: 'insensitive' } } },
+              { asset: { name: { contains: query.q, mode: 'insensitive' } } },
+              { employee: { name: { contains: query.q, mode: 'insensitive' } } },
+              { department: { name: { contains: query.q, mode: 'insensitive' } } },
+            ]
+          : undefined,
+      },
       orderBy: { allocatedAt: 'desc' },
       include: {
         asset: true,

@@ -28,10 +28,26 @@ const resolveSchema = z.object({
 router.get(
   '/',
   asyncRoute(async (req, res) => {
+    const query = z
+      .object({
+        q: z.string().optional(),
+        status: z.string().optional(),
+        priority: z.string().optional(),
+      })
+      .parse(req.query)
+
     const requests = await prisma.maintenanceRequest.findMany({
       where: {
-        status: req.query.status as never,
-        priority: req.query.priority as never,
+        status: query.status as never,
+        priority: query.priority as never,
+        OR: query.q
+          ? [
+              { asset: { tag: { contains: query.q, mode: 'insensitive' } } },
+              { asset: { name: { contains: query.q, mode: 'insensitive' } } },
+              { issue: { contains: query.q, mode: 'insensitive' } },
+              { technician: { name: { contains: query.q, mode: 'insensitive' } } },
+            ]
+          : undefined,
       },
       include: {
         asset: true,

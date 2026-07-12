@@ -3,22 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Search, Plus, SlidersHorizontal } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
+import { fetchAssets } from '../lib/services'
 import type { AssetStatus } from '../lib/types'
-
-interface Asset {
-  id: string
-  tag: string
-  name: string
-  category: string
-  status: AssetStatus
-  location: string
-}
-
-const mockAssets: Asset[] = [
-  { id: '1', tag: 'AF-0012', name: 'Dell Laptop', category: 'Electronics', status: 'ALLOCATED', location: 'Bangalore' },
-  { id: '2', tag: 'AF-0062', name: 'Projector', category: 'Electronics', status: 'UNDER_MAINTENANCE', location: 'HQ floor 2' },
-  { id: '3', tag: 'AF-0201', name: 'Office chair', category: 'Furniture', status: 'AVAILABLE', location: 'Warehouse' },
-]
 
 const filters = ['Category', 'Status', 'Department']
 
@@ -37,14 +23,9 @@ function statusVariant(status: AssetStatus) {
 export function AssetsPage() {
   const [search, setSearch] = useState('')
 
-  const { data: assets = mockAssets } = useQuery<Asset[]>({
+  const { data: assets = [], isLoading } = useQuery({
     queryKey: queryKeys.assets.list({ search }),
-    queryFn: async () => {
-      const res = await fetch(`/api/assets?q=${search}`)
-      if (!res.ok) return mockAssets
-      return res.json()
-    },
-    initialData: mockAssets,
+    queryFn: () => fetchAssets(search),
   })
 
   return (
@@ -86,42 +67,48 @@ export function AssetsPage() {
       </div>
 
       <div className="border border-border-subtle bg-white shadow-custom">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border-subtle text-left">
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                Tag
-              </th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                Name
-              </th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                Category
-              </th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                Status
-              </th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                Location
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {assets.map((asset) => (
-              <tr key={asset.id} className="hover:bg-background transition-colors cursor-pointer">
-                <td className="px-5 py-4 text-sm font-bold">{asset.tag}</td>
-                <td className="px-5 py-4 text-sm">{asset.name}</td>
-                <td className="px-5 py-4 text-sm text-foreground/60">{asset.category}</td>
-                <td className="px-5 py-4">
-                  <StatusPill variant={statusVariant(asset.status)}>
-                    {asset.status.replace(/_/g, ' ')}
-                  </StatusPill>
-                </td>
-                <td className="px-5 py-4 text-sm text-foreground/60">{asset.location}</td>
+        {isLoading ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">Loading assets...</p>
+        ) : assets.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">No assets found.</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border-subtle text-left">
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                  Tag
+                </th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                  Name
+                </th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                  Category
+                </th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                  Status
+                </th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                  Location
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {assets.map((asset) => (
+                <tr key={asset.id} className="hover:bg-background transition-colors cursor-pointer">
+                  <td className="px-5 py-4 text-sm font-bold">{asset.tag}</td>
+                  <td className="px-5 py-4 text-sm">{asset.name}</td>
+                  <td className="px-5 py-4 text-sm text-foreground/60">{asset.category}</td>
+                  <td className="px-5 py-4">
+                    <StatusPill variant={statusVariant(asset.status as AssetStatus)}>
+                      {asset.status.replace(/_/g, ' ')}
+                    </StatusPill>
+                  </td>
+                  <td className="px-5 py-4 text-sm text-foreground/60">{asset.location}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )

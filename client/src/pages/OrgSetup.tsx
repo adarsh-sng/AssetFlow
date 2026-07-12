@@ -3,40 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus, ChevronRight } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
+import { fetchDepartments } from '../lib/services'
 
 type Tab = 'departments' | 'categories' | 'employees'
-
-interface Department {
-  id: string
-  name: string
-  head: { id: string; name: string; email: string } | null
-  parent: { id: string; name: string } | null
-  status: 'ACTIVE' | 'INACTIVE'
-}
-
-const mockDepartments: Department[] = [
-  {
-    id: '1',
-    name: 'Engineering',
-    head: { id: 'e1', name: 'aditi rao', email: 'aditi@company.com' },
-    parent: null,
-    status: 'ACTIVE',
-  },
-  {
-    id: '2',
-    name: 'Facilities',
-    head: { id: 'e2', name: 'rohan mehta', email: 'rohan@company.com' },
-    parent: null,
-    status: 'ACTIVE',
-  },
-  {
-    id: '3',
-    name: 'Field ops (east)',
-    head: { id: 'e3', name: 'sana ismail', email: 'sana@company.com' },
-    parent: { id: '4', name: 'Field Ops' },
-    status: 'INACTIVE',
-  },
-]
 
 const tabs: { key: Tab; label: string }[] = [
   { key: 'departments', label: 'Departments' },
@@ -47,14 +16,9 @@ const tabs: { key: Tab; label: string }[] = [
 export function OrgSetupPage() {
   const [activeTab, setActiveTab] = useState<Tab>('departments')
 
-  const { data: departments = mockDepartments } = useQuery<Department[]>({
+  const { data: departments = [], isLoading } = useQuery({
     queryKey: queryKeys.departments.lists(),
-    queryFn: async () => {
-      const res = await fetch('/api/organization/departments')
-      if (!res.ok) return mockDepartments
-      return res.json()
-    },
-    initialData: mockDepartments,
+    queryFn: fetchDepartments,
   })
 
   return (
@@ -85,46 +49,50 @@ export function OrgSetupPage() {
 
       {activeTab === 'departments' && (
         <div className="border border-border-subtle bg-white shadow-custom">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border-subtle text-left">
-                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                  Department
-                </th>
-                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                  Head
-                </th>
-                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                  Parent Dept
-                </th>
-                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
-                  Status
-                </th>
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {departments.map((dept) => (
-                <tr key={dept.id} className="hover:bg-background transition-colors">
-                  <td className="px-5 py-4 text-sm font-medium">{dept.name}</td>
-                  <td className="px-5 py-4 text-sm text-foreground/60">
-                    {dept.head?.name ?? '—'}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-foreground/60">
-                    {dept.parent?.name ?? '—'}
-                  </td>
-                  <td className="px-5 py-4">
-                    <StatusPill variant={dept.status === 'ACTIVE' ? 'active' : 'warning'}>
-                      {dept.status}
-                    </StatusPill>
-                  </td>
-                  <td className="px-5 py-4">
-                    <ChevronRight size={16} className="text-foreground/30" />
-                  </td>
+          {isLoading ? (
+            <p className="px-5 py-8 text-sm text-foreground/50">Loading departments...</p>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border-subtle text-left">
+                  <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                    Department
+                  </th>
+                  <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                    Head
+                  </th>
+                  <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                    Parent Dept
+                  </th>
+                  <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">
+                    Status
+                  </th>
+                  <th className="px-5 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {departments.map((dept) => (
+                  <tr key={dept.id} className="hover:bg-background transition-colors">
+                    <td className="px-5 py-4 text-sm font-medium">{dept.name}</td>
+                    <td className="px-5 py-4 text-sm text-foreground/60">
+                      {dept.head?.name ?? '—'}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-foreground/60">
+                      {dept.parent?.name ?? '—'}
+                    </td>
+                    <td className="px-5 py-4">
+                      <StatusPill variant={dept.status === 'ACTIVE' ? 'active' : 'warning'}>
+                        {dept.status}
+                      </StatusPill>
+                    </td>
+                    <td className="px-5 py-4">
+                      <ChevronRight size={16} className="text-foreground/30" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 

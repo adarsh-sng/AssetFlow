@@ -5,61 +5,11 @@ import { KPICard } from '../components/ui/KPICard'
 import { AlertBanner } from '../components/ui/AlertBanner'
 import { ActivityItem } from '../components/ui/ActivityItem'
 import { queryKeys } from '../lib/query-keys'
-
-const mockStats = {
-  available: 128,
-  allocated: 76,
-  inRepair: 4,
-  bookings: 9,
-  pending: 3,
-  returns: 12,
-  overdue: 3,
-}
-
-interface ActivityData {
-  id: string
-  message: string
-  timestamp: string
-  type: 'allocation' | 'booking' | 'maintenance' | 'system'
-}
-
-const mockActivity: ActivityData[] = [
-  {
-    id: '1',
-    message: 'Laptop AF-0114 allocated to Priya Shah',
-    timestamp: new Date(Date.now() - 12 * 60000).toISOString(),
-    type: 'allocation',
-  },
-  {
-    id: '2',
-    message: 'Conference Room B2 booking confirmed for 2:00 PM',
-    timestamp: new Date(Date.now() - 60 * 60000).toISOString(),
-    type: 'booking',
-  },
-  {
-    id: '3',
-    message: 'Projector AF-0062 maintenance ticket resolved',
-    timestamp: new Date(Date.now() - 3 * 60 * 60000).toISOString(),
-    type: 'maintenance',
-  },
-  {
-    id: '4',
-    message: 'Inventory sync complete (248 records updated)',
-    timestamp: new Date(Date.now() - 24 * 60 * 60000).toISOString(),
-    type: 'system',
-  },
-]
-
-function formatTimestamp(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'Just now'
-  if (mins < 60) return `${mins} min ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
-}
+import {
+  fetchDashboardActivity,
+  fetchDashboardStats,
+  formatRelativeTime,
+} from '../lib/services'
 
 const today = new Date()
 const dateStr = today.toLocaleDateString('en-US', {
@@ -72,25 +22,23 @@ const dateStr = today.toLocaleDateString('en-US', {
 export function DashboardPage() {
   const navigate = useNavigate()
 
-  const { data: stats = mockStats } = useQuery({
+  const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: queryKeys.dashboard.stats(),
-    queryFn: async () => {
-      const res = await fetch('/api/dashboard/stats')
-      if (!res.ok) return mockStats
-      return res.json()
-    },
-    initialData: mockStats,
+    queryFn: fetchDashboardStats,
   })
 
-  const { data: activity = mockActivity } = useQuery<ActivityData[]>({
+  const { data: activity = [], isLoading: activityLoading } = useQuery({
     queryKey: queryKeys.dashboard.activity(),
-    queryFn: async () => {
-      const res = await fetch('/api/dashboard/activity')
-      if (!res.ok) return mockActivity
-      return res.json()
-    },
-    initialData: mockActivity,
+    queryFn: fetchDashboardActivity,
   })
+
+  if (statsLoading || !stats) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-foreground/50">
+        Loading dashboard...
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -160,14 +108,20 @@ export function DashboardPage() {
             Recent Activity
           </h2>
           <div className="border border-border-subtle bg-white p-5 shadow-custom">
-            {activity.map((item) => (
-              <ActivityItem
-                key={item.id}
-                message={item.message}
-                timestamp={formatTimestamp(item.timestamp)}
-                highlight={item.type === 'allocation'}
-              />
-            ))}
+            {activityLoading ? (
+              <p className="text-sm text-foreground/50">Loading activity...</p>
+            ) : activity.length === 0 ? (
+              <p className="text-sm text-foreground/50">No recent activity.</p>
+            ) : (
+              activity.map((item) => (
+                <ActivityItem
+                  key={item.id}
+                  message={item.message}
+                  timestamp={formatRelativeTime(item.timestamp)}
+                  highlight={item.type === 'allocation'}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>

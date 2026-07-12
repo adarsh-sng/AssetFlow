@@ -3,43 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Search, Plus, SlidersHorizontal, ArrowLeftRight, RotateCcw, AlertTriangle, ChevronDown } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
-
-interface Asset {
-  id: string
-  tag: string
-  name: string
-  status: 'AVAILABLE' | 'ALLOCATED'
-  currentHolder?: string
-  currentHolderDept?: string
-}
-
-interface Allocation {
-  id: string
-  assetTag: string
-  assetName: string
-  allocatedTo: string
-  targetType: 'EMPLOYEE' | 'DEPARTMENT'
-  expectedReturnAt: string | null
-  status: 'ACTIVE' | 'RETURNED' | 'TRANSFERRED'
-  isOverdue: boolean
-}
-
-const mockAssets: Asset[] = [
-  { id: '1', tag: 'AF-0114', name: 'Dell Laptop', status: 'ALLOCATED', currentHolder: 'Priya Shah', currentHolderDept: 'Engineering' },
-  { id: '2', tag: 'AF-0062', name: 'Projector', status: 'AVAILABLE' },
-  { id: '3', tag: 'AF-0201', name: 'Office Chair', status: 'ALLOCATED', currentHolder: 'Raj Kumar', currentHolderDept: 'Marketing' },
-  { id: '4', tag: 'AF-0089', name: 'Keyboard', status: 'AVAILABLE' },
-  { id: '5', tag: 'AF-0034', name: 'Monitor', status: 'AVAILABLE' },
-]
-
-const mockAllocations: Allocation[] = [
-  { id: '1', assetTag: 'AF-0114', assetName: 'Dell Laptop', allocatedTo: 'Priya Shah', targetType: 'EMPLOYEE', expectedReturnAt: '2026-07-15', status: 'ACTIVE', isOverdue: false },
-  { id: '2', assetTag: 'AF-0062', assetName: 'Projector', allocatedTo: 'Engineering', targetType: 'DEPARTMENT', expectedReturnAt: null, status: 'ACTIVE', isOverdue: false },
-  { id: '3', assetTag: 'AF-0201', assetName: 'Office Chair', allocatedTo: 'Raj Kumar', targetType: 'EMPLOYEE', expectedReturnAt: '2026-06-01', status: 'ACTIVE', isOverdue: true },
-  { id: '4', assetTag: 'AF-0089', assetName: 'Keyboard', allocatedTo: 'Marketing', targetType: 'DEPARTMENT', expectedReturnAt: '2026-07-10', status: 'ACTIVE', isOverdue: false },
-  { id: '5', assetTag: 'AF-0034', assetName: 'Monitor', allocatedTo: 'Anita Desai', targetType: 'EMPLOYEE', expectedReturnAt: '2026-04-01', status: 'RETURNED', isOverdue: false },
-  { id: '6', assetTag: 'AF-0178', assetName: 'Laptop', allocatedTo: 'Rohit Verma', targetType: 'EMPLOYEE', expectedReturnAt: '2026-07-01', status: 'TRANSFERRED', isOverdue: false },
-]
+import { fetchAllocationAssets, fetchAllocations } from '../lib/services'
 
 const filters = ['Status', 'Type', 'Department']
 
@@ -47,17 +11,17 @@ export function AllocationPage() {
   const [search, setSearch] = useState('')
   const [selectedAssetId, setSelectedAssetId] = useState('')
 
-  const { data: allocations = mockAllocations } = useQuery<Allocation[]>({
+  const { data: allocations = [], isLoading } = useQuery({
     queryKey: queryKeys.allocations.list({ search }),
-    queryFn: async () => {
-      const res = await fetch(`/api/allocations?q=${search}`)
-      if (!res.ok) return mockAllocations
-      return res.json()
-    },
-    initialData: mockAllocations,
+    queryFn: () => fetchAllocations(search),
   })
 
-  const selectedAsset = mockAssets.find((a) => a.id === selectedAssetId)
+  const { data: assetOptions = [] } = useQuery({
+    queryKey: queryKeys.assets.list({ scope: 'allocation-select' }),
+    queryFn: fetchAllocationAssets,
+  })
+
+  const selectedAsset = assetOptions.find((a) => a.id === selectedAssetId)
   const hasConflict = selectedAsset?.status === 'ALLOCATED'
 
   return (
@@ -113,7 +77,7 @@ export function AllocationPage() {
             className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
           >
             <option value="">Select Asset....</option>
-            {mockAssets.map((a) => (
+            {assetOptions.map((a) => (
               <option key={a.id} value={a.id}>{a.tag} - {a.name}</option>
             ))}
           </select>
@@ -141,62 +105,68 @@ export function AllocationPage() {
       )}
 
       <div className="border border-border-subtle bg-white shadow-custom">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border-subtle text-left">
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Asset</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Allocated To</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Type</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Expected Return</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Status</th>
-              <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allocations.map((a) => (
-              <tr key={a.id} className="hover:bg-background transition-colors cursor-pointer">
-                <td className="px-5 py-4">
-                  <span className="text-sm font-bold">{a.assetTag}</span>
-                  <span className="ml-2 text-sm text-foreground/60">{a.assetName}</span>
-                </td>
-                <td className="px-5 py-4 text-sm">{a.allocatedTo}</td>
-                <td className="px-5 py-4">
-                  <StatusPill variant={a.targetType === 'EMPLOYEE' ? 'outlined' : 'active'}>
-                    {a.targetType}
-                  </StatusPill>
-                </td>
-                <td className={`px-5 py-4 text-sm ${a.isOverdue ? 'font-bold text-accent' : 'text-foreground/60'}`}>
-                  {a.expectedReturnAt
-                    ? new Date(a.expectedReturnAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                    : '—'}
-                </td>
-                <td className="px-5 py-4">
-                  <StatusPill
-                    variant={
-                      a.status === 'ACTIVE'
-                        ? a.isOverdue ? 'warning' : 'active'
-                        : a.status === 'TRANSFERRED' ? 'active' : 'outlined'
-                    }
-                  >
-                    {a.isOverdue ? 'OVERDUE' : a.status}
-                  </StatusPill>
-                </td>
-                <td className="px-5 py-4">
-                  {a.status === 'ACTIVE' && (
-                    <div className="flex gap-2">
-                      <button className="border border-border-subtle px-3 py-1.5 text-2xs font-bold uppercase tracking-widest text-foreground/60 hover:border-foreground hover:text-foreground transition-colors">
-                        <RotateCcw size={11} />
-                      </button>
-                      <button className="border border-border-subtle px-3 py-1.5 text-2xs font-bold uppercase tracking-widest text-foreground/60 hover:border-foreground hover:text-foreground transition-colors">
-                        <ArrowLeftRight size={11} />
-                      </button>
-                    </div>
-                  )}
-                </td>
+        {isLoading ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">Loading allocations...</p>
+        ) : allocations.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-foreground/50">No allocations found.</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border-subtle text-left">
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Asset</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Allocated To</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Type</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Expected Return</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Status</th>
+                <th className="px-5 py-3 text-2xs font-bold uppercase tracking-widest text-foreground/50">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {allocations.map((a) => (
+                <tr key={a.id} className="hover:bg-background transition-colors cursor-pointer">
+                  <td className="px-5 py-4">
+                    <span className="text-sm font-bold">{a.assetTag}</span>
+                    <span className="ml-2 text-sm text-foreground/60">{a.assetName}</span>
+                  </td>
+                  <td className="px-5 py-4 text-sm">{a.allocatedTo}</td>
+                  <td className="px-5 py-4">
+                    <StatusPill variant={a.targetType === 'EMPLOYEE' ? 'outlined' : 'active'}>
+                      {a.targetType}
+                    </StatusPill>
+                  </td>
+                  <td className={`px-5 py-4 text-sm ${a.isOverdue ? 'font-bold text-accent' : 'text-foreground/60'}`}>
+                    {a.expectedReturnAt
+                      ? new Date(a.expectedReturnAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </td>
+                  <td className="px-5 py-4">
+                    <StatusPill
+                      variant={
+                        a.status === 'ACTIVE'
+                          ? a.isOverdue ? 'warning' : 'active'
+                          : a.status === 'TRANSFERRED' ? 'active' : 'outlined'
+                      }
+                    >
+                      {a.isOverdue ? 'OVERDUE' : a.status}
+                    </StatusPill>
+                  </td>
+                  <td className="px-5 py-4">
+                    {a.status === 'ACTIVE' && (
+                      <div className="flex gap-2">
+                        <button className="border border-border-subtle px-3 py-1.5 text-2xs font-bold uppercase tracking-widest text-foreground/60 hover:border-foreground hover:text-foreground transition-colors">
+                          <RotateCcw size={11} />
+                        </button>
+                        <button className="border border-border-subtle px-3 py-1.5 text-2xs font-bold uppercase tracking-widest text-foreground/60 hover:border-foreground hover:text-foreground transition-colors">
+                          <ArrowLeftRight size={11} />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )
