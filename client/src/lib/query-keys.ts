@@ -16,6 +16,10 @@ export const queryKeys = {
     all: ['departments'] as const,
     lists: () => [...queryKeys.departments.all, 'list'] as const,
   },
+  categories: {
+    all: ['categories'] as const,
+    lists: () => [...queryKeys.categories.all, 'list'] as const,
+  },
   employees: {
     all: ['employees'] as const,
     lists: () => [...queryKeys.employees.all, 'list'] as const,
@@ -25,6 +29,12 @@ export const queryKeys = {
     lists: () => [...queryKeys.allocations.all, 'list'] as const,
     list: (filters: Record<string, unknown>) =>
       [...queryKeys.allocations.lists(), filters] as const,
+  },
+  transfers: {
+    all: ['transfers'] as const,
+    lists: () => [...queryKeys.transfers.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.transfers.lists(), filters] as const,
   },
   bookings: {
     all: ['bookings'] as const,
@@ -43,6 +53,7 @@ export const queryKeys = {
     lists: () => [...queryKeys.audits.all, 'list'] as const,
     list: (filters: Record<string, unknown>) =>
       [...queryKeys.audits.lists(), filters] as const,
+    detail: (id: string) => [...queryKeys.audits.all, 'detail', id] as const,
   },
   notifications: {
     all: ['notifications'] as const,
@@ -52,6 +63,9 @@ export const queryKeys = {
   },
   reports: {
     all: ['reports'] as const,
-    lists: () => [...queryKeys.reports.all, 'list'] as const,
+    utilization: () => [...queryKeys.reports.all, 'utilization'] as const,
+    maintenanceFrequency: () => [...queryKeys.reports.all, 'maintenance-frequency'] as const,
+    assetUsage: () => [...queryKeys.reports.all, 'asset-usage'] as const,
+    bookingHeatmap: () => [...queryKeys.reports.all, 'booking-heatmap'] as const,
   },
 } as const
