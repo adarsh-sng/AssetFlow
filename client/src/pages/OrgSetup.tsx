@@ -1,61 +1,61 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, ChevronRight } from "lucide-react";
-import { StatusPill } from "../components/ui/StatusPill";
-import { queryKeys } from "../lib/query-keys";
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Plus, ChevronRight } from 'lucide-react'
+import { StatusPill } from '../components/ui/StatusPill'
+import { queryKeys } from '../lib/query-keys'
 
-type Tab = "departments" | "categories" | "employees";
+type Tab = 'departments' | 'categories' | 'employees'
 
 interface Department {
-  id: string;
-  name: string;
-  head: string;
-  parentDept: string;
-  status: "ACTIVE" | "INACTIVE";
+  id: string
+  name: string
+  head: { id: string; name: string; email: string } | null
+  parent: { id: string; name: string } | null
+  status: 'ACTIVE' | 'INACTIVE'
 }
 
 const mockDepartments: Department[] = [
   {
-    id: "1",
-    name: "Engineering",
-    head: "aditi rao",
-    parentDept: "—",
-    status: "ACTIVE",
+    id: '1',
+    name: 'Engineering',
+    head: { id: 'e1', name: 'aditi rao', email: 'aditi@company.com' },
+    parent: null,
+    status: 'ACTIVE',
   },
   {
-    id: "2",
-    name: "Facilities",
-    head: "rohan mehta",
-    parentDept: "—",
-    status: "ACTIVE",
+    id: '2',
+    name: 'Facilities',
+    head: { id: 'e2', name: 'rohan mehta', email: 'rohan@company.com' },
+    parent: null,
+    status: 'ACTIVE',
   },
   {
-    id: "3",
-    name: "Field ops (east)",
-    head: "sana ismail",
-    parentDept: "Field Ops",
-    status: "INACTIVE",
+    id: '3',
+    name: 'Field ops (east)',
+    head: { id: 'e3', name: 'sana ismail', email: 'sana@company.com' },
+    parent: { id: '4', name: 'Field Ops' },
+    status: 'INACTIVE',
   },
-];
+]
 
 const tabs: { key: Tab; label: string }[] = [
-  { key: "departments", label: "Departments" },
-  { key: "categories", label: "Categories" },
-  { key: "employees", label: "Employees" },
-];
+  { key: 'departments', label: 'Departments' },
+  { key: 'categories', label: 'Categories' },
+  { key: 'employees', label: 'Employees' },
+]
 
 export function OrgSetupPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("departments");
+  const [activeTab, setActiveTab] = useState<Tab>('departments')
 
   const { data: departments = mockDepartments } = useQuery<Department[]>({
     queryKey: queryKeys.departments.lists(),
     queryFn: async () => {
-      const res = await fetch("/api/organization/departments");
-      if (!res.ok) return mockDepartments;
-      return res.json();
+      const res = await fetch('/api/organization/departments')
+      if (!res.ok) return mockDepartments
+      return res.json()
     },
     initialData: mockDepartments,
-  });
+  })
 
   return (
     <div className="space-y-6">
@@ -74,8 +74,8 @@ export function OrgSetupPage() {
             onClick={() => setActiveTab(tab.key)}
             className={`px-5 py-3 text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? "border-b-2 border-foreground text-foreground"
-                : "text-foreground/50 hover:text-foreground"
+                ? 'border-b-2 border-foreground text-foreground'
+                : 'text-foreground/50 hover:text-foreground'
             }`}
           >
             {tab.label}
@@ -83,7 +83,7 @@ export function OrgSetupPage() {
         ))}
       </div>
 
-      {activeTab === "departments" && (
+      {activeTab === 'departments' && (
         <div className="border border-border-subtle bg-white shadow-custom">
           <table className="w-full">
             <thead>
@@ -105,21 +105,16 @@ export function OrgSetupPage() {
             </thead>
             <tbody>
               {departments.map((dept) => (
-                <tr
-                  key={dept.id}
-                  className="hover:bg-background transition-colors"
-                >
+                <tr key={dept.id} className="hover:bg-background transition-colors">
                   <td className="px-5 py-4 text-sm font-medium">{dept.name}</td>
                   <td className="px-5 py-4 text-sm text-foreground/60">
-                    {dept.head}
+                    {dept.head?.name ?? '—'}
                   </td>
                   <td className="px-5 py-4 text-sm text-foreground/60">
-                    {dept.parentDept}
+                    {dept.parent?.name ?? '—'}
                   </td>
                   <td className="px-5 py-4">
-                    <StatusPill
-                      variant={dept.status === "ACTIVE" ? "active" : "warning"}
-                    >
+                    <StatusPill variant={dept.status === 'ACTIVE' ? 'active' : 'warning'}>
                       {dept.status}
                     </StatusPill>
                   </td>
@@ -133,22 +128,21 @@ export function OrgSetupPage() {
         </div>
       )}
 
-      {activeTab === "categories" && (
+      {activeTab === 'categories' && (
         <div className="space-y-4">
           <p className="text-sm text-foreground/50">To be built</p>
         </div>
       )}
 
-      {activeTab === "employees" && (
+      {activeTab === 'employees' && (
         <div className="space-y-4">
           <p className="text-sm text-foreground/50">To be built</p>
         </div>
       )}
 
       <p className="text-xs text-foreground/40">
-        Editing a department here also drives the pilllist in Assets &
-        Allocation
+        Editing a department here also drives the pilllist in Assets & Allocation
       </p>
     </div>
-  );
+  )
 }
