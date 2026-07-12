@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EmployeeRole {
+  ADMIN
+  ASSET_MANAGER
+  DEPARTMENT_HEAD
+  EMPLOYEE
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ALLOCATED
+  RESERVED
+  UNDER_MAINTENANCE
+  LOST
+  RETIRED
+  DISPOSED
+}
+
+model Employee {
+  id           String         @id @default(cuid())
+  name         String
+  email        String         @unique
+  passwordHash String
+  role         EmployeeRole   @default(EMPLOYEE)
+  status       RecordStatus   @default(ACTIVE)
+  departmentId String?
+  department   Department?    @relation(fields: [departmentId], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model Department {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  status      RecordStatus  @default(ACTIVE)
+  parentId    String?
+  parent      Department?   @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children    Department[]  @relation("DepartmentHierarchy")
+  headId      String?
+  employees   Employee[]
+  assets      Asset[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model AssetCategory {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  status      RecordStatus @default(ACTIVE)
+  assets      Asset[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Asset {
+  id              String        @id @default(cuid())
+  tag             String        @unique
+  name            String
+  serialNumber    String?       @unique
+  status          AssetStatus   @default(AVAILABLE)
+  condition       String?
+  location        String?
+  acquisitionDate DateTime?
+  acquisitionCost Decimal?
+  isBookable      Boolean       @default(false)
+  categoryId      String
+  category        AssetCategory @relation(fields: [categoryId], references: [id])
+  departmentId    String?
+  department      Department?   @relation(fields: [departmentId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
