@@ -1,5 +1,3 @@
-import type { ApiResponse } from './types'
-
 const BASE_URL = '/api'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -12,13 +10,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   })
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(error.error || `Request failed: ${res.status}`)
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Request failed: ${res.status}`)
   }
 
-  const json: ApiResponse<T> = await res.json()
-  if (json.error) throw new Error(json.error)
-  return json.data as T
+  if (res.status === 204) return undefined as T
+  return res.json()
 }
 
 export const api = {
