@@ -1,8 +1,17 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Plus, SlidersHorizontal, ArrowLeftRight, RotateCcw } from 'lucide-react'
+import { Search, Plus, SlidersHorizontal, ArrowLeftRight, RotateCcw, AlertTriangle, ChevronDown } from 'lucide-react'
 import { StatusPill } from '../components/ui/StatusPill'
 import { queryKeys } from '../lib/query-keys'
+
+interface Asset {
+  id: string
+  tag: string
+  name: string
+  status: 'AVAILABLE' | 'ALLOCATED'
+  currentHolder?: string
+  currentHolderDept?: string
+}
 
 interface Allocation {
   id: string
@@ -14,6 +23,14 @@ interface Allocation {
   status: 'ACTIVE' | 'RETURNED' | 'TRANSFERRED'
   isOverdue: boolean
 }
+
+const mockAssets: Asset[] = [
+  { id: '1', tag: 'AF-0114', name: 'Dell Laptop', status: 'ALLOCATED', currentHolder: 'Priya Shah', currentHolderDept: 'Engineering' },
+  { id: '2', tag: 'AF-0062', name: 'Projector', status: 'AVAILABLE' },
+  { id: '3', tag: 'AF-0201', name: 'Office Chair', status: 'ALLOCATED', currentHolder: 'Raj Kumar', currentHolderDept: 'Marketing' },
+  { id: '4', tag: 'AF-0089', name: 'Keyboard', status: 'AVAILABLE' },
+  { id: '5', tag: 'AF-0034', name: 'Monitor', status: 'AVAILABLE' },
+]
 
 const mockAllocations: Allocation[] = [
   { id: '1', assetTag: 'AF-0114', assetName: 'Dell Laptop', allocatedTo: 'Priya Shah', targetType: 'EMPLOYEE', expectedReturnAt: '2026-07-15', status: 'ACTIVE', isOverdue: false },
@@ -28,6 +45,7 @@ const filters = ['Status', 'Type', 'Department']
 
 export function AllocationPage() {
   const [search, setSearch] = useState('')
+  const [selectedAssetId, setSelectedAssetId] = useState('')
 
   const { data: allocations = mockAllocations } = useQuery<Allocation[]>({
     queryKey: queryKeys.allocations.list({ search }),
@@ -38,6 +56,9 @@ export function AllocationPage() {
     },
     initialData: mockAllocations,
   })
+
+  const selectedAsset = mockAssets.find((a) => a.id === selectedAssetId)
+  const hasConflict = selectedAsset?.status === 'ALLOCATED'
 
   return (
     <div className="space-y-6">
@@ -82,6 +103,42 @@ export function AllocationPage() {
           </button>
         ))}
       </div>
+
+      <div>
+        <label className="mb-1 block text-2xs font-bold uppercase tracking-widest text-foreground/50">Asset</label>
+        <div className="relative">
+          <select
+            value={selectedAssetId}
+            onChange={(e) => setSelectedAssetId(e.target.value)}
+            className="w-full appearance-none border border-border-subtle bg-white px-4 py-3 text-sm outline-none focus:border-foreground"
+          >
+            <option value="">Select Asset....</option>
+            {mockAssets.map((a) => (
+              <option key={a.id} value={a.id}>{a.tag} - {a.name}</option>
+            ))}
+          </select>
+          <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40" />
+        </div>
+      </div>
+
+      {hasConflict && (
+        <div className="border border-accent/30 bg-accent/10 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-accent" />
+            <div>
+              <p className="text-sm font-medium text-accent">
+                Already Allocated to {selectedAsset?.currentHolder} ({selectedAsset?.currentHolderDept})
+              </p>
+              <p className="mt-1 text-xs text-foreground/60">
+                Direct re-allocation is blocked - submit a transfer request below
+              </p>
+              <button className="mt-3 border border-foreground px-4 py-2 text-2xs font-bold uppercase tracking-widest text-foreground hover:bg-foreground hover:text-background transition-colors">
+                Transfer Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="border border-border-subtle bg-white shadow-custom">
         <table className="w-full">
