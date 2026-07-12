@@ -9,6 +9,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ email, password }),
   })
 
@@ -29,6 +30,7 @@ export async function signup(
   const res = await fetch('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ name, email, password, departmentId }),
   })
 
