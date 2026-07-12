@@ -1,17 +1,38 @@
 import { env as loadEnv } from 'custom-env'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
+
+const loadCustomEnv = loadEnv as unknown as (
+  stage?: string,
+  path?: string,
+  defaultEnvFallback?: boolean
+) => void
 
 process.env.APP_STAGE = process.env.APP_STAGE || 'dev'
 
 const isProduction = process.env.APP_STAGE === 'production'
 const isDevelopment = process.env.APP_STAGE === 'dev'
 const isTest = process.env.APP_STAGE === 'test'
+const serverDir = dirname(fileURLToPath(import.meta.url))
+const srcDir = join(serverDir, 'src')
+
+function loadEnvFrom(path: string, stage?: string) {
+  const fileName = stage ? `.env.${stage}` : '.env'
+
+  if (existsSync(join(path, fileName)) || existsSync(join(path, '.env'))) {
+    loadCustomEnv(stage, path)
+  }
+}
 
 // Load .env file
 if (isDevelopment) {
-  loadEnv()
+  loadEnvFrom(serverDir)
+  loadEnvFrom(srcDir)
 } else if (isTest) {
-  loadEnv('test')
+  loadEnvFrom(serverDir, 'test')
+  loadEnvFrom(srcDir, 'test')
 }
 
 const envSchema = z.object({
