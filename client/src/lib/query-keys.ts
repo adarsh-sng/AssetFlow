@@ -20,6 +20,12 @@ export const queryKeys = {
     all: ['employees'] as const,
     lists: () => [...queryKeys.employees.all, 'list'] as const,
   },
+  allocations: {
+    all: ['allocations'] as const,
+    lists: () => [...queryKeys.allocations.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.allocations.lists(), filters] as const,
+  },
   bookings: {
     all: ['bookings'] as const,
     lists: () => [...queryKeys.bookings.all, 'list'] as const,
