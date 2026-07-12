@@ -1,5 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { Layout } from './components/layout/Layout'
+import { LoginPage } from './pages/Login'
+import { SignupPage } from './pages/Signup'
 import { DashboardPage } from './pages/Dashboard'
 import { OrgSetupPage } from './pages/OrgSetup'
 import { AssetsPage } from './pages/Assets'
@@ -13,6 +15,8 @@ import { NotificationsPage } from './pages/Notifications'
 export function App() {
   return (
     <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
       <Route element={<Layout />}>
         <Route index element={<DashboardPage />} />
         <Route path="org-setup" element={<OrgSetupPage />} />
