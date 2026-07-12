@@ -50,7 +50,7 @@ export function OrgSetupPage() {
   const { data: departments = mockDepartments } = useQuery<Department[]>({
     queryKey: queryKeys.departments.lists(),
     queryFn: async () => {
-      const res = await fetch("/api/departments");
+      const res = await fetch("/api/organization/departments");
       if (!res.ok) return mockDepartments;
       return res.json();
     },
