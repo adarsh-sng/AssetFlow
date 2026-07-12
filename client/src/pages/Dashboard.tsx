@@ -15,30 +15,37 @@ const mockStats = {
   returns: 12,
 }
 
-const mockActivity = [
+interface ActivityItem {
+  id: string
+  message: string
+  timestamp: string
+  type: 'allocation' | 'booking' | 'maintenance' | 'system'
+}
+
+const mockActivity: ActivityItem[] = [
   {
     id: '1',
     message: 'Laptop AF-0114 allocated to Priya Shah',
     timestamp: '12 min ago',
-    type: 'allocation' as const,
+    type: 'allocation',
   },
   {
     id: '2',
     message: 'Conference Room B2 booking confirmed for 2:00 PM',
     timestamp: '1 hr ago',
-    type: 'booking' as const,
+    type: 'booking',
   },
   {
     id: '3',
     message: 'Projector AF-0062 maintenance ticket resolved',
     timestamp: '3 hrs ago',
-    type: 'maintenance' as const,
+    type: 'maintenance',
   },
   {
     id: '4',
     message: 'Inventory sync complete (248 records updated)',
     timestamp: 'Yesterday',
-    type: 'system' as const,
+    type: 'system',
   },
 ]
 
@@ -63,7 +70,7 @@ export function DashboardPage() {
     initialData: mockStats,
   })
 
-  const { data: activity = mockActivity } = useQuery({
+  const { data: activity = mockActivity } = useQuery<ActivityItem[]>({
     queryKey: queryKeys.dashboard.activity(),
     queryFn: async () => {
       const res = await fetch('/api/dashboard/activity')
