@@ -3,6 +3,8 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
+import { ZodError } from 'zod'
+import { authRoutes } from './routes/auth.ts'
 
 const app = express()
 
@@ -32,9 +34,7 @@ app.get('/health', (req, res) => {
 })
 
 // Routes
-// app.use('/api/auth', authRoutes)
-// app.use('/api/habits', habitRoutes)
-// app.use('/api/users', userRoutes)
+app.use('/api/auth', authRoutes)
 
 // 404 handler
 app.use((req, res) => {
@@ -52,6 +52,16 @@ app.use(
     res: express.Response,
     next: express.NextFunction
   ) => {
+    if (err instanceof ZodError) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        issues: err.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      })
+    }
+
     console.error(err.stack)
     res.status(500).json({
       error: 'Something went wrong!',

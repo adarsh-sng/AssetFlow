@@ -37,15 +37,14 @@ const envSchema = z.object({
 
   // CORS
   CORS_ORIGIN: z
-    .string()
-    .or(z.array(z.string()))
+    .union([z.string(), z.array(z.string())])
+    .default('http://localhost:5173')
     .transform((val) => {
       if (typeof val === 'string') {
         return val.split(',').map((origin) => origin.trim())
       }
       return val
-    })
-    .default('http://localhost:5173'),
+    }),
 
   LOG_LEVEL: z
     .enum(['error', 'warn', 'info', 'debug', 'trace'])
